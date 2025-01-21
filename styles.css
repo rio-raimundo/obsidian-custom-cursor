@@ -1,5 +1,6 @@
 :root{
 	--custom-cursor-color: white;
+	--selection-exists: true;
 }
 
 .dashing-cursor {

@@ -24,6 +24,7 @@ export default class NinjaCursorPlugin extends Plugin {
 
 		// Return if selection does not exist
 		if (!parentElement || !selection || !selection.focusNode) {
+			this.cursorElement.style.opacity = '0'; // Hide the cursor
 			this.scheduleNextUpdate();
 			return;
 		}
@@ -47,6 +48,7 @@ export default class NinjaCursorPlugin extends Plugin {
 		};
 
 		// console.log(currentPos);
+		this.cursorElement.style.opacity = '1'; // Show the cursor
 		this.cursorElement.style.setProperty("--cursor-x1", `${currentPos.x}px`);
 		this.cursorElement.style.setProperty("--cursor-y1", `${currentPos.y}px`);
 
