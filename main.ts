@@ -24,7 +24,6 @@ export default class NinjaCursorPlugin extends Plugin {
 
 		// Return if selection does not exist
 		if (!parentElement || !selection || !selection.focusNode) {
-			new Notice("Selection does not exist.");
 			this.scheduleNextUpdate();
 			return;
 		}
