@@ -1,0 +1,11 @@
+{
+	"id": "obsidian-smooth-typing-animation",
+	"name": "Smooth Typing Animation",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Adds a smooth cursor animation when typing in the editor.",
+	"author": "rio-raimundo",
+	"authorUrl": "https://github.com/rio-raimundo",
+	"fundingUrl":  "ko-fi.com/rioraimundo",
+	"isDesktopOnly": true
+}
