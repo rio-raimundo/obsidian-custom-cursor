@@ -1,0 +1,24 @@
+:root{
+	--custom-cursor-color: white;
+}
+
+.dashing-cursor {
+	background: var(--custom-cursor-color);
+	height: 18px;
+	position: absolute;
+	opacity: 1;
+	top: 0px;
+	left: 0px;
+	height: 18px;
+	width: 2px;
+	max-height: calc(var(--font-ui-large) * 2);
+	transform: translate(var(--cursor-x1), var(--cursor-y1));
+	pointer-events: none;
+}
+
+.cm-editor * {
+	caret-color: transparent;
+}
+body:not(:has(.cm-cursor-secondary)) .cm-editor .cm-cursor {
+	display: none !important;
+}
