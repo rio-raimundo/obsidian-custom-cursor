@@ -1,9 +1,9 @@
 import { Plugin, Notice, MarkdownView } from "obsidian";
-type Coordinates = { x: number; y: number};
+type Coordinates = { left: number; top: number};
 type MarkdownSubView = { sizerEl: HTMLElement };
 
-export default class NinjaCursorPlugin extends Plugin {
-	lastPos: Coordinates = { x: 0, y: 0};
+export default class SmoothTypingAnimation extends Plugin {
+	lastPos: Coordinates = { left: 0, top: 0};
 	cursorElement: HTMLSpanElement;
 
 	// Contains the architecture which will be called when the main function needs to return
@@ -34,27 +34,17 @@ export default class NinjaCursorPlugin extends Plugin {
 		cursorRange.setStart(selection.focusNode, selection.focusOffset)
 		const cursorDetails = cursorRange.getBoundingClientRect();
 
-		// Find current cursor position and assign to currentPos
-		if (!cursorDetails) {
-			new Notice("Could not find cursor position");
-			this.scheduleNextUpdate();
-			return;
-		}
-
-		//  Get the current position, accounting for the scroll of the page
 		const currentPos: Coordinates = {
-			x: cursorDetails.x,
-			y: cursorDetails.y + parentElement?.scrollTop,
+			left: cursorDetails.left,
+			top: cursorDetails.top,
 		};
-
-		// console.log(currentPos);
 		this.cursorElement.style.opacity = '1'; // Show the cursor
-		this.cursorElement.style.setProperty("--cursor-x1", `${currentPos.x}px`);
-		this.cursorElement.style.setProperty("--cursor-y1", `${currentPos.y}px`);
+		this.cursorElement.style.setProperty("--cursor-x1", `${currentPos.left}px`);
+		this.cursorElement.style.setProperty("--cursor-y1", `${currentPos.top}px`);
 
 		//  Update this.lastPos
-		this.lastPos.x = currentPos.x;
-		this.lastPos.y = currentPos.y;
+		this.lastPos.left = currentPos.left;
+		this.lastPos.top = currentPos.top;
 
 		// Schedule next update
 		requestAnimationFrame(this.updateCursor.bind(this));
@@ -64,6 +54,14 @@ export default class NinjaCursorPlugin extends Plugin {
 		// Create the cursor element, and apply the custom class cursor to it
 		this.cursorElement = document.body.createSpan({
 			cls: "dashing-cursor",
+		});
+
+		window.addEventListener('blur', () => {
+			document.body.classList.add('window-blurred');
+		});
+		
+		window.addEventListener('focus', () => {
+			document.body.classList.remove('window-blurred');
 		});
 
 		// Call our initial function, which will recall itself.
