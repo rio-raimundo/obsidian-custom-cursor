@@ -1,20 +1,31 @@
-:root{
+.custom-cursor {
+	/* Assign variables */
 	--custom-cursor-color: white;
-	--selection-exists: true;
-}
+	--custom-cursor-width: 1px;
+	--custom-cursor-blink-speed: 1.25s;
+	--custom-cursor-blink-delay: 0s;
 
-.dashing-cursor {
+	/* Assign properties */
 	background: var(--custom-cursor-color);
-	height: 18px;
+	/* opacity: 1; */
+
+	height: var(--cursor-height);
+	max-height: calc(var(--font-ui-large) * 2);
+	width: var(--custom-cursor-width);
 	position: absolute;
-	opacity: 1;
 	top: 0px;
 	left: 0px;
-	height: 18px;
-	width: 2px;
-	max-height: calc(var(--font-ui-large) * 2);
+
+	display: block;
+
 	transform: translate(var(--cursor-x1), var(--cursor-y1));
 	pointer-events: none;
+	animation: blinkOpacity steps(1, start) var(--custom-cursor-blink-speed) infinite;
+}
+
+@keyframes blinkOpacity {
+    0%   { opacity: 1;  }
+	50%  { opacity: 0;  }
 }
 
 .cm-editor * {

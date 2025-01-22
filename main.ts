@@ -1,4 +1,4 @@
-import { Plugin, Notice, MarkdownView } from "obsidian";
+import { Plugin, MarkdownView } from "obsidian";
 type Coordinates = { left: number; top: number};
 type MarkdownSubView = { sizerEl: HTMLElement };
 
@@ -24,7 +24,7 @@ export default class SmoothTypingAnimation extends Plugin {
 
 		// Return if selection does not exist
 		if (!parentElement || !selection || !selection.focusNode) {
-			this.cursorElement.style.opacity = '0'; // Hide the cursor
+			// this.cursorElement.style.opacity = '0'; // Hide the cursor
 			this.scheduleNextUpdate();
 			return;
 		}
@@ -34,26 +34,25 @@ export default class SmoothTypingAnimation extends Plugin {
 		cursorRange.setStart(selection.focusNode, selection.focusOffset)
 		const cursorDetails = cursorRange.getBoundingClientRect();
 
-		const currentPos: Coordinates = {
-			left: cursorDetails.left,
-			top: cursorDetails.top,
-		};
-		this.cursorElement.style.opacity = '1'; // Show the cursor
-		this.cursorElement.style.setProperty("--cursor-x1", `${currentPos.left}px`);
-		this.cursorElement.style.setProperty("--cursor-y1", `${currentPos.top}px`);
+		// this.cursorElement.style.opacity = '1'; // Show the cursor
+		this.cursorElement.style.setProperty("--cursor-x1", `${cursorDetails.left}px`);
+		this.cursorElement.style.setProperty("--cursor-y1", `${cursorDetails.top}px`);
+		this.cursorElement.style.setProperty("--cursor-height", `${cursorDetails.height}px`);
 
 		//  Update this.lastPos
-		this.lastPos.left = currentPos.left;
-		this.lastPos.top = currentPos.top;
+		this.lastPos = {
+			left: cursorDetails.left,
+			top: cursorDetails.top,
+		}
 
 		// Schedule next update
-		requestAnimationFrame(this.updateCursor.bind(this));
+		this.scheduleNextUpdate();
 	}
 
 	async onload() {
 		// Create the cursor element, and apply the custom class cursor to it
 		this.cursorElement = document.body.createSpan({
-			cls: "dashing-cursor",
+			cls: "custom-cursor",
 		});
 
 		window.addEventListener('blur', () => {
