@@ -4,10 +4,11 @@
 	--custom-cursor-width: 1px;
 	--custom-cursor-blink-speed: 1.25s;
 	--custom-cursor-blink-delay: 0s;
+	--cursor-opacity: 1;
 
 	/* Assign properties */
 	background: var(--custom-cursor-color);
-	/* opacity: 1; */
+	opacity: var(--cursor-opacity);
 
 	height: var(--cursor-height);
 	max-height: calc(var(--font-ui-large) * 2);
@@ -20,13 +21,8 @@
 
 	transform: translate(var(--cursor-x1), var(--cursor-y1));
 	pointer-events: none;
-	animation: blinkOpacity steps(1, start) var(--custom-cursor-blink-speed) infinite;
 }
 
-@keyframes blinkOpacity {
-    0%   { opacity: 1;  }
-	50%  { opacity: 0;  }
-}
 
 .cm-editor * {
 	caret-color: transparent;

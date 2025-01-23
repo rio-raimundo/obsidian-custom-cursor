@@ -12,19 +12,26 @@ export default class SmoothTypingAnimation extends Plugin {
 		requestAnimationFrame(this.updateCursor.bind(this));
 	}
 
-	private blinkCursor() {
-		// Return an opacity of 1 for the first 'half' of the blink, then an opacity of 0 for the second half
-		const timePassed = Date.now() - this.blinkStartTime;
-		if (timePassed < 250) { return 1; }
-		else if (timePassed < 500) { return 0; }
-
-		// Once blink has been processed, reset the timer and return 1
+	//  Cursor functions
+	private resetCursor() {
 		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
 		return 1;
 	}
 
-	// Main function, called every frame
-	updateCursor() {
+	private blinkCursor(cursorPositionChanged: boolean): number {
+		// Check if cursor position has changed
+		if (cursorPositionChanged) { return this.resetCursor(); }
+
+		// Return an opacity of 1 for the first 'half' of the blink, then an opacity of 0 for the second half
+		const timePassed = Date.now() - this.blinkStartTime;
+		if (timePassed < 500) { return 1; }
+		else if (timePassed < 1000) { return 0; }
+
+		// Once blink has been processed, reset the timer and return 1
+		return this.resetCursor();
+	}
+
+	private returnReferences() {
 		// Get reference to selection
 		const parentElement = (<MarkdownSubView>(
 			(<unknown>(
@@ -34,9 +41,14 @@ export default class SmoothTypingAnimation extends Plugin {
 		))?.sizerEl?.parentElement;
 		const selection = activeWindow.getSelection();
 
+		return { selection };
+	}
+
+	// Main function, called every frame
+	updateCursor() {
 		// Return if selection does not exist
-		if (!parentElement || !selection || !selection.focusNode) {
-			// this.cursorElement.style.opacity = '0'; // Hide the cursor
+		const { selection } = this.returnReferences();
+		if (!selection || !selection.focusNode) {
 			this.scheduleNextUpdate();
 			return;
 		}
@@ -46,12 +58,19 @@ export default class SmoothTypingAnimation extends Plugin {
 		cursorRange.setStart(selection.focusNode, selection.focusOffset)
 		const cursorDetails = cursorRange.getBoundingClientRect();
 
-		// this.cursorElement.style.opacity = '1'; // Show the cursor
+		// Check if cursor position has changed
+		const cursorPositionChanged = (this.lastPos.left !== cursorDetails.left || this.lastPos.top !== cursorDetails.top);
+
+		// Calculate current cursor opacity 
+		const blinkOpacity = this.blinkCursor(cursorPositionChanged);
+
+		// Send cursor details to .css to render
 		this.cursorElement.style.setProperty("--cursor-x1", `${cursorDetails.left}px`);
 		this.cursorElement.style.setProperty("--cursor-y1", `${cursorDetails.top}px`);
 		this.cursorElement.style.setProperty("--cursor-height", `${cursorDetails.height}px`);
+		this.cursorElement.style.setProperty("--cursor-opacity", `${blinkOpacity}`);
 
-		//  Update this.lastPos
+		//  Update this.lastPos and recall
 		this.lastPos = {
 			left: cursorDetails.left,
 			top: cursorDetails.top,
