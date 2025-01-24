@@ -14,7 +14,7 @@ export default class SmoothTypingAnimation extends Plugin {
 	blinkStartTime: number = Date.now();
 	blinkDuration = 1200;
 
-	characterMovementTime = 1000;
+	characterMovementTime = 40;
 	remainingMoveTime = 0;
 
 	// Contains the architecture which will be called when the main function needs to return
@@ -130,7 +130,7 @@ export default class SmoothTypingAnimation extends Plugin {
 			};
 		}
 		else {
-			currIconCoords = this.prevIconCoords;
+			currIconCoords = currCursorCoords;
 		}
 
 		// Send cursor details to .css to render
