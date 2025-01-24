@@ -1,5 +1,6 @@
 import { get } from "http";
 import { Plugin, MarkdownView } from "obsidian";
+import { start } from "repl";
 type Coordinates = { left: number; top: number};
 type Position = { line: number; ch: number };
 
@@ -14,7 +15,7 @@ export default class SmoothTypingAnimation extends Plugin {
 	blinkStartTime: number = Date.now();
 	blinkDuration = 1200;
 
-	characterMovementTime = 40;
+	characterMovementTime = 80;
 	remainingMoveTime = 0;
 
 	// Contains the architecture which will be called when the main function needs to return
@@ -42,16 +43,17 @@ export default class SmoothTypingAnimation extends Plugin {
 	}
 
 	// Handles smooth typing, and returns fraction of distance to travel this frame
-	private handleSmoothTyping(currCursorPos: Position | null, timeSinceLastFrame: number): number {
-		const returnStatement = (fractionTravelled = 0) => {
+	private handleSmoothTyping(currCursorPos: Position | null, timeSinceLastFrame: number): [boolean, number] {
+		const returnStatement = (shouldReset = false, fractionTravelled = 0): [boolean, number] => {
 			if (fractionTravelled === 0) { this.remainingMoveTime = 0; }
 			this.prevCursorPos = currCursorPos;
-			return fractionTravelled;
+			return [shouldReset, fractionTravelled];
 		}
 
 		// If current cursor position does not exist
 		if (!currCursorPos || !this.prevCursorPos) { return returnStatement(); }
 		
+		let shouldReset = false;
 		const charIncremented = Math.abs(this.prevCursorPos.ch - currCursorPos.ch) === 1;
 		const charMoved = Math.abs(this.prevCursorPos.ch - currCursorPos.ch) !== 0;
 		const lineMoved = Math.abs(this.prevCursorPos.line - currCursorPos.line) !== 0;
@@ -64,17 +66,18 @@ export default class SmoothTypingAnimation extends Plugin {
 
 		// If there has been a smoothMovement of the true cursor, we add to the movement time remaining
 		else if (charIncremented && !lineMoved) {
-			this.remainingMoveTime += this.characterMovementTime;
+			this.remainingMoveTime = this.characterMovementTime;
+			shouldReset = true;
 		}
 		
 		// Regardless of movement, we get the fraction of the total distance travelled (timeSinceLastFrame / remainingMovementTime)
 		// and remove the timeSinceLastFrame from the remainingMovementTime
-		if (this.remainingMoveTime <= 0) { return returnStatement(); }
+		if (this.remainingMoveTime <= 0) { return returnStatement(shouldReset); }
 		const fractionTravelled = Math.min(timeSinceLastFrame / this.remainingMoveTime, 1);
 		this.remainingMoveTime = Math.max(0, this.remainingMoveTime - timeSinceLastFrame);
 
 		// Update prevCursorPosition
-		return returnStatement(fractionTravelled);
+		return returnStatement(shouldReset, fractionTravelled);
 	} 
 
 	private returnReferences(): { selection: Selection | null; activeLeaf: MarkdownView | null } {
@@ -117,16 +120,21 @@ export default class SmoothTypingAnimation extends Plugin {
 		// Get the fraction of total distance that the cursor icon should travel this frame
 		// nonzero if currently smoothly moving
 		// and turn it into a true distance
-		const iconMovementFraction = this.handleSmoothTyping(currCursorPos, timeSinceLastFrame);
+		const [shouldReset, iconMovementFraction] = this.handleSmoothTyping(currCursorPos, timeSinceLastFrame);
 		let currIconCoords;
-		if (iconMovementFraction !== 0 && this.prevIconCoords) {			
+		if (iconMovementFraction !== 0 && this.prevIconCoords) {	
+			// Assign where the icon coordinate should be at the start of the frame. resets to start of previous letter if another letter added.
+			let startingIconCoords;
+			if (shouldReset) { startingIconCoords = this.prevCursorCoords; }
+			else { startingIconCoords = this.prevIconCoords; }
+			
 			const movementThisFrame: Coordinates = {
-				left: iconMovementFraction * (currCursorCoords.left - this.prevIconCoords.left),
-				top: iconMovementFraction * (currCursorCoords.top - this.prevIconCoords.top)
+				left: iconMovementFraction * (currCursorCoords.left - startingIconCoords.left),
+				top: iconMovementFraction * (currCursorCoords.top - startingIconCoords.top)
 			};
 			currIconCoords = {
-				left: this.prevIconCoords.left + movementThisFrame.left,
-				top: this.prevIconCoords.top + movementThisFrame.top
+				left: startingIconCoords.left + movementThisFrame.left,
+				top: startingIconCoords.top + movementThisFrame.top
 			};
 		}
 		else {
