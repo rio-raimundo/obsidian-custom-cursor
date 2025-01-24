@@ -72,7 +72,6 @@ export default class SmoothTypingAnimation extends Plugin {
 		if (this.remainingMoveTime <= 0) { return returnStatement(); }
 		const fractionTravelled = Math.min(timeSinceLastFrame / this.remainingMoveTime, 1);
 		this.remainingMoveTime = Math.max(0, this.remainingMoveTime - timeSinceLastFrame);
-		console.log(this.remainingMoveTime)
 
 		// Update prevCursorPosition
 		return returnStatement(fractionTravelled);
@@ -119,29 +118,35 @@ export default class SmoothTypingAnimation extends Plugin {
 		// nonzero if currently smoothly moving
 		// and turn it into a true distance
 		const iconMovementFraction = this.handleSmoothTyping(currCursorPos, timeSinceLastFrame);
-		let currIconCoords: Coordinates = {left: currCursorCoords.left, top: currCursorCoords.top};
-		if (iconMovementFraction !== 0)	{			
+		let currIconCoords;
+		if (iconMovementFraction !== 0 && this.prevIconCoords) {			
 			const movementThisFrame: Coordinates = {
-				left: iconMovementFraction * (currCursorCoords.left - this.prevCursorCoords.left),
-				top: iconMovementFraction * (currCursorCoords.top - this.prevCursorCoords.top)
+				left: iconMovementFraction * (currCursorCoords.left - this.prevIconCoords.left),
+				top: iconMovementFraction * (currCursorCoords.top - this.prevIconCoords.top)
 			};
 			currIconCoords = {
-				left: this.prevCursorCoords.left + movementThisFrame.left,
-				top: this.prevCursorCoords.top + movementThisFrame.top
+				left: this.prevIconCoords.left + movementThisFrame.left,
+				top: this.prevIconCoords.top + movementThisFrame.top
 			};
+		}
+		else {
+			currIconCoords = this.prevIconCoords;
 		}
 
 		// Send cursor details to .css to render
-		this.cursorElement.style.setProperty("--cursor-x1", `${currIconCoords.left}px`);
-		this.cursorElement.style.setProperty("--cursor-y1", `${currIconCoords.top}px`);
-		this.cursorElement.style.setProperty("--cursor-height", `${currCursorCoords.height}px`);
-		this.cursorElement.style.setProperty("--cursor-opacity", `${blinkOpacity}`);
+		if (currIconCoords) {
+			this.cursorElement.style.setProperty("--cursor-x1", `${currIconCoords.left}px`);
+			this.cursorElement.style.setProperty("--cursor-y1", `${currIconCoords.top}px`);
+			this.cursorElement.style.setProperty("--cursor-height", `${currCursorCoords.height}px`);
+			this.cursorElement.style.setProperty("--cursor-opacity", `${blinkOpacity}`);
+		}
 
 		//  Update this.lastPos and recall
 		this.prevCursorCoords = {
 			left: currCursorCoords.left,
 			top: currCursorCoords.top,
 		}
+		this.prevIconCoords = currIconCoords;
 
 		// Schedule next update
 		this.scheduleNextUpdate();
