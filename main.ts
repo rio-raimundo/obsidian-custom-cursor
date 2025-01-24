@@ -14,7 +14,7 @@ export default class SmoothTypingAnimation extends Plugin {
 	blinkStartTime: number = Date.now();
 	blinkDuration = 1200;
 
-	characterMovementTime = 80;
+	characterMovementTime = 1000;
 	remainingMoveTime = 0;
 
 	// Contains the architecture which will be called when the main function needs to return
@@ -58,19 +58,21 @@ export default class SmoothTypingAnimation extends Plugin {
 
 		// If there has been a sharpMovement of the true cursor, we cancel the smooth movement of the icon
 		if ((charMoved && !charIncremented) || (lineMoved)) {
+			console.log('sharp movement')
 			this.remainingMoveTime = 0;
 		}
 
 		// If there has been a smoothMovement of the true cursor, we add to the movement time remaining
 		else if (charIncremented && !lineMoved) {
-			console.log('smooth Movement!')
 			this.remainingMoveTime += this.characterMovementTime;
+			console.log(this.remainingMoveTime)
 		}
 		
 		// Regardless of movement, we get the fraction of the total distance travelled (timeSinceLastFrame / remainingMovementTime)
 		// and remove the timeSinceLastFrame from the remainingMovementTime
 		if (this.remainingMoveTime <= 0) { return returnStatement(); }
 		const fractionTravelled = Math.min(timeSinceLastFrame / this.remainingMoveTime, 1);
+		console.log(this.remainingMoveTime, timeSinceLastFrame, fractionTravelled)
 		this.remainingMoveTime = Math.max(0, this.remainingMoveTime - timeSinceLastFrame);
 
 		// Update prevCursorPosition
@@ -86,6 +88,7 @@ export default class SmoothTypingAnimation extends Plugin {
 	private getTimeSinceLastFrame(): number {
 		const currentTime = Date.now();
 		const timeSinceLastFrame = currentTime - this.prevFrameTime;
+		this.prevFrameTime = currentTime;
 		return timeSinceLastFrame;
 	}
 
