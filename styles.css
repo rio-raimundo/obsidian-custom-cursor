@@ -2,8 +2,6 @@
 	/* Assign variables */
 	--custom-cursor-color: white;
 	--custom-cursor-width: 1px;
-	--custom-cursor-blink-speed: 1.25s;
-	--custom-cursor-blink-delay: 0s;
 
 	/* Assign properties */
 	background: var(--custom-cursor-color);

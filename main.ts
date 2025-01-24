@@ -1,10 +1,10 @@
-import { Plugin, MarkdownView, Editor, App, PluginSettingTab, Setting } from 'obsidian';
+import { Plugin, MarkdownView, Editor, App, PluginSettingTab, Setting, ButtonComponent, ColorComponent} from 'obsidian';
 type Coordinates = { left: number; top: number};
 type Position = { line: number; ch: number };
 interface ExtendedEditor extends Editor { containerEl: HTMLElement; }
   
 export default class SmoothTypingAnimation extends Plugin {
-	settings: ExamplePluginSettings;
+	settings: SmoothTypingSettings;
 	cursorElement: HTMLSpanElement;
 	isInWindow = true;
 
@@ -167,7 +167,7 @@ export default class SmoothTypingAnimation extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
-		this.addSettingTab(new ExampleSettingTab(this.app, this));
+		this.addSettingTab(new SmoothTypingSettingsTab(this.app, this));
 
 		// Create the cursor element, and apply the custom class cursor to it
 		this.cursorElement = document.body.createSpan({ cls: "custom-cursor", });
@@ -188,37 +188,147 @@ export default class SmoothTypingAnimation extends Plugin {
 
 
 // HANDLE SETTINGS
-interface ExamplePluginSettings {
-	dateFormat: string;
+interface SmoothTypingSettings {
+	blinkSpeed: number;
+	blinkDelay: number;
+	characterMovementTime: number;
+	cursorWidth: number;
+	cursorColor: string;
 }
-const DEFAULT_SETTINGS: Partial<ExamplePluginSettings> = {
-	dateFormat: 'YYYY-MM-DD',
+const DEFAULT_SETTINGS: Partial<SmoothTypingSettings> = {
+	blinkSpeed: 1.2,
+	blinkDelay: 0,
+	characterMovementTime: 80,
+	cursorWidth: 1,
+	cursorColor: '#ffffff',
 };
 
-export class ExampleSettingTab extends PluginSettingTab {
-  plugin: SmoothTypingAnimation;
+export class SmoothTypingSettingsTab extends PluginSettingTab {
+	plugin: SmoothTypingAnimation;
+	
+	constructor(app: App, plugin: SmoothTypingAnimation) {
+		super(app, plugin);
+		this.plugin = plugin;
+	}
 
-  constructor(app: App, plugin: SmoothTypingAnimation) {
-    super(app, plugin);
-    this.plugin = plugin;
-  }
 
-  display(): void {
-    const { containerEl } = this;
+	display(): void {
+		const { containerEl } = this;
+		containerEl.empty();
+		
 
-    containerEl.empty();
+		// DROPDOWN LIST EXAMPLE
+		new Setting(this.containerEl)
+			.setName('Cursor colour')
+			.setDesc('Change the colour of the cursor icon.')
+			.addDropdown((dropdown) => {
+				dropdown.addOption('white', 'White');
+				dropdown.addOption('black', 'Black');
+				dropdown.setValue(this.plugin.settings.cursorColor);
+				dropdown.onChange(async (value: 'white' | 'black') => {
+					this.plugin.settings.cursorColor = value;
+					await this.plugin.saveSettings();
+				});
+			});
 
-    new Setting(containerEl)
-      .setName('Date format')
-      .setDesc('Default date format')
-      .addText((text) =>
-        text
-          .setPlaceholder('MMMM dd, yyyy')
-          .setValue(this.plugin.settings.dateFormat)
-          .onChange(async (value) => {
-            this.plugin.settings.dateFormat = value;
-            await this.plugin.saveSettings();
-          })
-      );
-  }
+		// SLIDER EXAMPLE
+		new Setting(this.containerEl)
+			.setName('Blink speed (in seconds)')
+			.setDesc('The number of seconds to complete one full cursor blink cycle.')
+			.addSlider((slider) => {
+				slider
+				.setLimits(0.2, 5, 0.1)
+				.setDynamicTooltip()
+				.setValue(
+					this.plugin.settings.blinkSpeed ??
+					DEFAULT_SETTINGS.blinkSpeed, // why??
+				)
+				.onChange(async (val) => {
+					this.plugin.settings.blinkSpeed = val;
+					await this.plugin.saveSettings();
+				});
+			});
+
+			new Setting(this.containerEl)
+			.setName('Blink delay (in seconds)')
+			.setDesc('The number of seconds after cursor movement before blinking begins.')
+			.addSlider((slider) => {
+				slider
+				.setLimits(0, 5, 0.1)
+				.setDynamicTooltip()
+				.setValue(
+					this.plugin.settings.characterMovementTime ??
+					DEFAULT_SETTINGS.characterMovementTime, // why??
+				)
+				.onChange(async (val) => {
+					this.plugin.settings.characterMovementTime = val;
+					await this.plugin.saveSettings();
+				});
+			});
+
+			new Setting(this.containerEl)
+			.setName('Smooth typing speed (in milliseconds)')
+			.setDesc('The number of milliseconds for the cursor icon to reach the true cursor location after typing or moving the cursor. 0 for instant speed.')
+			.addSlider((slider) => {
+				slider
+				.setLimits(0, 200, 1)
+				.setDynamicTooltip()
+				.setValue(
+					this.plugin.settings.blinkDelay ??
+					DEFAULT_SETTINGS.blinkDelay, // why??
+				)
+				.onChange(async (val) => {
+					this.plugin.settings.blinkDelay = val;
+					await this.plugin.saveSettings();
+				});
+			});
+
+			new Setting(this.containerEl)
+			.setName('Cursor width (in pixels)')
+			.setDesc('The width of the cursor icon in pixels.')
+			.addSlider((slider) => {
+				slider
+				.setLimits(1, 5, 1)
+				.setDynamicTooltip()
+				.setValue(
+					this.plugin.settings.cursorWidth ??
+					DEFAULT_SETTINGS.cursorWidth, // why??
+				)
+				.onChange(async (val) => {
+					this.plugin.settings.cursorWidth = val;
+					await this.plugin.saveSettings();
+				});
+			});
+
+			const iconColorSetting = new Setting(this.containerEl)
+			.setName('Icon color')
+			.setDesc('Change the color of the displayed icons.');
+			
+			new ResetButtonComponent(iconColorSetting.controlEl).onClick(async () => {
+				colorPicker.setValue(DEFAULT_SETTINGS.cursorColor ?? '#ffffff');
+			// Custom saving to not save the color black in the data.
+			await this.plugin.saveSettings();
+			});
+
+			const colorPicker = new ColorComponent(iconColorSetting.controlEl)
+			.setValue(this.plugin.settings.cursorColor ?? DEFAULT_SETTINGS.cursorColor)
+			.onChange(async (value) => {
+				this.plugin.settings.cursorColor = value;
+				await this.plugin.saveSettings();
+			});
+	}
+}
+
+class ResetButtonComponent extends ButtonComponent {
+	constructor(protected contentEl: HTMLElement) {
+		super(contentEl);
+		this.setTooltip('Restore default');
+		this.setIcon('rotate-ccw');
+		this.render();
+	}
+
+	private render(): void {
+		this.buttonEl.classList.add('clickable-icon');
+		this.buttonEl.classList.add('extra-setting-button');
+	}
 }
