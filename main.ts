@@ -1,4 +1,3 @@
-import { get } from "http";
 import { Plugin, MarkdownView } from "obsidian";
 type Coordinates = { left: number; top: number};
 type Position = { line: number; ch: number };
@@ -14,7 +13,7 @@ export default class SmoothTypingAnimation extends Plugin {
 	blinkStartTime: number = Date.now();
 	blinkDuration = 1200;
 
-	characterMovementTime = 40;
+	characterMovementTime = 80;
 	remainingMoveTime = 0;
 
 	// Contains the architecture which will be called when the main function needs to return
