@@ -4,7 +4,6 @@
 	--custom-cursor-width: 1px;
 	--custom-cursor-blink-speed: 1.25s;
 	--custom-cursor-blink-delay: 0s;
-	--cursor-opacity: 1;
 
 	/* Assign properties */
 	background: var(--custom-cursor-color);
@@ -16,8 +15,6 @@
 	position: absolute;
 	top: 0px;
 	left: 0px;
-
-	display: block;
 
 	transform: translate(var(--cursor-x1), var(--cursor-y1));
 	pointer-events: none;

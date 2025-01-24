@@ -1,11 +1,10 @@
-import { Plugin, MarkdownView, Editor } from "obsidian";
+import { Plugin, MarkdownView, Editor, App, PluginSettingTab, Setting } from 'obsidian';
 type Coordinates = { left: number; top: number};
 type Position = { line: number; ch: number };
-interface ExtendedEditor extends Editor {
-    containerEl: HTMLElement;
-}
-
+interface ExtendedEditor extends Editor { containerEl: HTMLElement; }
+  
 export default class SmoothTypingAnimation extends Plugin {
+	settings: ExamplePluginSettings;
 	cursorElement: HTMLSpanElement;
 	isInWindow = true;
 
@@ -167,6 +166,9 @@ export default class SmoothTypingAnimation extends Plugin {
 	}
 
 	async onload() {
+		await this.loadSettings();
+		this.addSettingTab(new ExampleSettingTab(this.app, this));
+
 		// Create the cursor element, and apply the custom class cursor to it
 		this.cursorElement = document.body.createSpan({ cls: "custom-cursor", });
 
@@ -174,4 +176,49 @@ export default class SmoothTypingAnimation extends Plugin {
 		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
 		this.scheduleNextUpdate();
 	}
+
+	async loadSettings() {
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+	}
+	
+	async saveSettings() {
+		await this.saveData(this.settings);
+	}
+}
+
+
+// HANDLE SETTINGS
+interface ExamplePluginSettings {
+	dateFormat: string;
+}
+const DEFAULT_SETTINGS: Partial<ExamplePluginSettings> = {
+	dateFormat: 'YYYY-MM-DD',
+};
+
+export class ExampleSettingTab extends PluginSettingTab {
+  plugin: SmoothTypingAnimation;
+
+  constructor(app: App, plugin: SmoothTypingAnimation) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display(): void {
+    const { containerEl } = this;
+
+    containerEl.empty();
+
+    new Setting(containerEl)
+      .setName('Date format')
+      .setDesc('Default date format')
+      .addText((text) =>
+        text
+          .setPlaceholder('MMMM dd, yyyy')
+          .setValue(this.plugin.settings.dateFormat)
+          .onChange(async (value) => {
+            this.plugin.settings.dateFormat = value;
+            await this.plugin.saveSettings();
+          })
+      );
+  }
 }
