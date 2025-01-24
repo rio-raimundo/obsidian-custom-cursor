@@ -92,6 +92,9 @@ export default class SmoothTypingAnimation extends Plugin {
 		return timeSinceLastFrame;
 	}
 
+	private removeIcon() { this.cursorElement.style.display = 'none'; }
+	private bringIconBack() { this.cursorElement.style.display = 'block'; console.log('got here'); }
+
 	// Main function, called every frame
 	updateCursor() {
 		// Keep track of time on each frame, and how much has elapsed
@@ -99,16 +102,19 @@ export default class SmoothTypingAnimation extends Plugin {
 
 		// Get needed references and return if there is no selection
 		const { selection, activeLeaf } = this.returnReferences();
-		if (!selection || !selection.focusNode) {
-			this.scheduleNextUpdate();
-			return;
-		}
+		if (!selection || !selection.focusNode) { return this.scheduleNextUpdate(); }
+
+		// If cursor position does not exist, we should also not render it
+		const currCursorPos: Position | null = activeLeaf ? activeLeaf.editor.getCursor() : null;
+		if (!currCursorPos) { this.removeIcon(); return this.scheduleNextUpdate();}
+
+		// Since everything exists, we bring the cursor back if we removed it before
+		this.bringIconBack();
 		
 		// Take the focused 'node', turn it into a range from start to finish
 		const cursorRange = document.createRange();
 		cursorRange.setStart(selection.focusNode, selection.focusOffset)
 		const currCursorCoords = cursorRange.getBoundingClientRect();
-		const currCursorPos: Position | null = activeLeaf ? activeLeaf.editor.getCursor() : null;
 
 		// Check if cursor position has changed
 		const cursorCoordinatesChanged = (this.prevCursorCoords.left !== currCursorCoords.left || this.prevCursorCoords.top !== currCursorCoords.top);
@@ -151,7 +157,7 @@ export default class SmoothTypingAnimation extends Plugin {
 		this.prevIconCoords = currIconCoords;
 
 		// Schedule next update
-		this.scheduleNextUpdate();
+		return this.scheduleNextUpdate();
 	}
 
 	async onload() {
