@@ -21,15 +21,15 @@ export default class SmoothTypingAnimation extends Plugin {
 		requestAnimationFrame(this.updateCursor.bind(this));
 	}
 
-	//  Cursor functions
-	private resetCursor() {
-		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
-		return 1;
-	}
-
+	//  Handles blinking of cursor and resets if it moves
 	private blinkCursor(cursorPosChanged: boolean): number {
+		const resetCursor = () => {
+			requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
+			return 1;
+		}
+
 		// Check if cursor position has changed
-		if (cursorPosChanged) { return this.resetCursor(); }
+		if (cursorPosChanged) { return resetCursor(); }
 
 		// Return an opacity of 1 for the first 'half' of the blink, then an opacity of 0 for the second half
 		const timePassed = Date.now() - this.blinkStartTime;
@@ -37,7 +37,7 @@ export default class SmoothTypingAnimation extends Plugin {
 		else if (timePassed < this.blinkDuration) { return 0; }
 
 		// Once blink has been processed, reset the timer and return 1
-		return this.resetCursor();
+		return resetCursor();
 	}
 
 	// Handles smooth typing, and returns fraction of distance to travel this frame
@@ -156,18 +156,11 @@ export default class SmoothTypingAnimation extends Plugin {
 
 	async onload() {
 		// Create the cursor element, and apply the custom class cursor to it
-		this.cursorElement = document.body.createSpan({
-			cls: "custom-cursor",
-		});
+		this.cursorElement = document.body.createSpan({ cls: "custom-cursor", });
 		
 		//  Create listeners to see if the cursor is currently on the right page (disappears if not)
-		window.addEventListener('blur', () => {
-			document.body.classList.add('window-blurred');
-		});
-		
-		window.addEventListener('focus', () => {
-			document.body.classList.remove('window-blurred');
-		});
+		window.addEventListener('blur', () => { document.body.classList.add('window-blurred'); });
+		window.addEventListener('focus', () => { document.body.classList.remove('window-blurred'); });
 
 		// Initialise variables and schedule our first function call, which will be recalled once per frame.
 		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
