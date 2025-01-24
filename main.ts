@@ -19,6 +19,14 @@ export default class SmoothTypingAnimation extends Plugin {
 	characterMovementTime = 80;
 	remainingMoveTime = 0;
 
+	changeCursorColour(colour: string | null = null): void {
+		if (colour === null) {
+			const isLightTheme = document.body.classList.contains('theme-dark') ? false : true;
+			colour = isLightTheme ? `#000000` : `#ffffff`
+		}
+		this.cursorElement.style.setProperty("--cursor-color", colour);
+	}
+
 	// Contains the architecture which will be called when the main function needs to return
 	private scheduleNextUpdate() {
 		requestAnimationFrame(this.updateCursor.bind(this));
@@ -170,7 +178,9 @@ export default class SmoothTypingAnimation extends Plugin {
 		this.addSettingTab(new SmoothTypingSettingsTab(this.app, this));
 
 		// Create the cursor element, and apply the custom class cursor to it
+		// Set the default cursor colour based on the theme
 		this.cursorElement = document.body.createSpan({ cls: "custom-cursor", });
+		this.changeCursorColour();  // resets if no arguments given
 
 		// Initialise variables and schedule our first function call, which will be recalled once per frame.
 		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
@@ -216,13 +226,15 @@ export class SmoothTypingSettingsTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
+		// CURSOR COLOUR SETTING
 		const cursorColorSetting = new Setting(this.containerEl)
 		.setName('Cursor colour')
-		.setDesc('The colour of the cursor icon.');
+		.setDesc('The colour of the cursor icon. Defaults to (dark-mode dependent) black or white.');
 		
 		new ResetButtonComponent(cursorColorSetting.controlEl).onClick(async () => {
-			colorPicker.setValue(DEFAULT_SETTINGS.cursorColor ?? '#ffffff');
+			colorPicker.setValue('#ffffff');
 			this.plugin.settings.cursorColor = null; // Custom saving to not save the color black in the data.
+			this.plugin.changeCursorColour();
 			await this.plugin.saveSettings();
 		});
 
@@ -230,6 +242,7 @@ export class SmoothTypingSettingsTab extends PluginSettingTab {
 		.setValue(this.plugin.settings.cursorColor ?? '#ffffff')
 		.onChange(async (value) => {
 			this.plugin.settings.cursorColor = value;
+			this.plugin.changeCursorColour(value);
 			await this.plugin.saveSettings();
 		});
 

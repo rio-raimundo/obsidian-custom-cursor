@@ -1,15 +1,15 @@
 .custom-cursor {
 	/* Assign variables */
-	--custom-cursor-color: white;
-	--custom-cursor-width: 1px;
+	--cursor-color: white;
+	--cursor-width: 1px;
 
 	/* Assign properties */
-	background: var(--custom-cursor-color);
+	background: var(--cursor-color);
 	opacity: var(--cursor-opacity);
 
 	height: var(--cursor-height);
 	max-height: calc(var(--font-ui-large) * 2);
-	width: var(--custom-cursor-width);
+	width: var(--cursor-width);
 	position: absolute;
 	top: 0px;
 	left: 0px;
