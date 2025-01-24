@@ -1,6 +1,9 @@
-import { Plugin, MarkdownView } from "obsidian";
+import { Plugin, MarkdownView, Editor } from "obsidian";
 type Coordinates = { left: number; top: number};
 type Position = { line: number; ch: number };
+interface ExtendedEditor extends Editor {
+    containerEl: HTMLElement;
+}
 
 export default class SmoothTypingAnimation extends Plugin {
 	cursorElement: HTMLSpanElement;
@@ -79,10 +82,11 @@ export default class SmoothTypingAnimation extends Plugin {
 		return returnStatement(fractionTravelled);
 	} 
 
-	private returnReferences(): { selection: Selection | null; activeLeaf: MarkdownView | null } {
+	private returnReferences(): { selection: Selection | null; editor: ExtendedEditor | null } {
 		const selection = activeWindow.getSelection();
-		const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView); 
-		return { selection, activeLeaf };
+		const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const editor: ExtendedEditor | null = activeLeaf ? (activeLeaf.editor as ExtendedEditor) : null;
+		return { selection, editor };
 	}
 
 	private getTimeSinceLastFrame(): number {
@@ -101,17 +105,21 @@ export default class SmoothTypingAnimation extends Plugin {
 		const timeSinceLastFrame = this.getTimeSinceLastFrame();
 
 		// Get needed references and return if there is no selection
-		const { selection, activeLeaf } = this.returnReferences();
+		const { selection, editor } = this.returnReferences();
 		if (!selection || !selection.focusNode) { return this.scheduleNextUpdate(); }
-
-		// If cursor position does not exist, we should also not render it
-		const currCursorPos: Position | null = activeLeaf ? activeLeaf.editor.getCursor() : null;
-		if (!currCursorPos || !this.isInWindow) { this.removeIcon(); return this.scheduleNextUpdate();}
+		if (!editor || !editor.containerEl || !editor.containerEl.className.includes('cm-focused')) {  this.removeIcon(); return this.scheduleNextUpdate(); }
 		else { this.bringIconBack(); }
+		
+		// If cursor position does not exist, we should also not render it
+		const currCursorPos: Position = editor.getCursor();
 		
 		// Take the focused 'node', turn it into a range from start to finish
 		const cursorRange = document.createRange();
-		cursorRange.setStart(selection.focusNode, selection.focusOffset)
+
+		// Have to handle 0 as a special case so that the cursor shows up on empty lines, not sure why
+		cursorRange.setStart(selection.focusNode, selection.focusOffset);
+		if (selection.focusOffset === 0) { cursorRange.setEnd(selection.focusNode, 1); }
+		else { cursorRange.setEnd(selection.focusNode, selection.focusOffset); }
 		const currCursorCoords = cursorRange.getBoundingClientRect();
 
 		// Check if cursor position has changed
@@ -161,10 +169,6 @@ export default class SmoothTypingAnimation extends Plugin {
 	async onload() {
 		// Create the cursor element, and apply the custom class cursor to it
 		this.cursorElement = document.body.createSpan({ cls: "custom-cursor", });
-		
-		//  Create listeners to see if the cursor is currently on the right page (disappears if not)
-		window.addEventListener('blur', () => { this.isInWindow = false; });
-		window.addEventListener('focus', () => { this.isInWindow = true; });
 
 		// Initialise variables and schedule our first function call, which will be recalled once per frame.
 		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
