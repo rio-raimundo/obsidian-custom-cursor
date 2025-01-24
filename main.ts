@@ -4,6 +4,7 @@ type Position = { line: number; ch: number };
 
 export default class SmoothTypingAnimation extends Plugin {
 	cursorElement: HTMLSpanElement;
+	isInWindow = true;
 
 	prevCursorCoords: Coordinates = { left: 0, top: 0};  // measured in px
 	prevCursorPos: Position | null = { line: 0, ch: 0 };  // measured in line and character
@@ -57,7 +58,6 @@ export default class SmoothTypingAnimation extends Plugin {
 
 		// If there has been a sharpMovement of the true cursor, we cancel the smooth movement of the icon
 		if ((charMoved && !charIncremented) || (lineMoved)) {
-			console.log('sharp movement')
 			this.remainingMoveTime = 0;
 		}
 
@@ -93,7 +93,7 @@ export default class SmoothTypingAnimation extends Plugin {
 	}
 
 	private removeIcon() { this.cursorElement.style.display = 'none'; }
-	private bringIconBack() { this.cursorElement.style.display = 'block'; console.log('got here'); }
+	private bringIconBack() { this.cursorElement.style.display = 'block'; }
 
 	// Main function, called every frame
 	updateCursor() {
@@ -106,10 +106,8 @@ export default class SmoothTypingAnimation extends Plugin {
 
 		// If cursor position does not exist, we should also not render it
 		const currCursorPos: Position | null = activeLeaf ? activeLeaf.editor.getCursor() : null;
-		if (!currCursorPos) { this.removeIcon(); return this.scheduleNextUpdate();}
-
-		// Since everything exists, we bring the cursor back if we removed it before
-		this.bringIconBack();
+		if (!currCursorPos || !this.isInWindow) { this.removeIcon(); return this.scheduleNextUpdate();}
+		else { this.bringIconBack(); }
 		
 		// Take the focused 'node', turn it into a range from start to finish
 		const cursorRange = document.createRange();
@@ -165,8 +163,8 @@ export default class SmoothTypingAnimation extends Plugin {
 		this.cursorElement = document.body.createSpan({ cls: "custom-cursor", });
 		
 		//  Create listeners to see if the cursor is currently on the right page (disappears if not)
-		window.addEventListener('blur', () => { document.body.classList.add('window-blurred'); });
-		window.addEventListener('focus', () => { document.body.classList.remove('window-blurred'); });
+		window.addEventListener('blur', () => { this.isInWindow = false; });
+		window.addEventListener('focus', () => { this.isInWindow = true; });
 
 		// Initialise variables and schedule our first function call, which will be recalled once per frame.
 		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });

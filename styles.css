@@ -30,7 +30,4 @@
 body:not(:has(.cm-cursor-secondary)) .cm-editor .cm-cursor {
 	display: none !important;
 }
-body.window-blurred .custom-cursor {
-    display: none;
-}
 
