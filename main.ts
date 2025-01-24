@@ -64,7 +64,7 @@ export default class SmoothTypingAnimation extends Plugin {
 
 		// If there has been a smoothMovement of the true cursor, we add to the movement time remaining
 		else if (charIncremented && !lineMoved) {
-			this.remainingMoveTime += this.characterMovementTime;
+			this.remainingMoveTime = this.characterMovementTime;
 		}
 		
 		// Regardless of movement, we get the fraction of the total distance travelled (timeSinceLastFrame / remainingMovementTime)
