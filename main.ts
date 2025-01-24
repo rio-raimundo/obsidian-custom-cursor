@@ -42,7 +42,7 @@ export default class SmoothTypingAnimation extends Plugin {
 	}
 
 	// Handles smooth typing, and returns fraction of distance to travel this frame
-	private handleSmoothTyping(currCursorPos: Position | null, timeSinceLastFrame: number): number {
+	private handleSmoothTyping(currCursorPos: Position | null, currCursorCoords: Coordinates, timeSinceLastFrame: number): number {
 		const returnStatement = (fractionTravelled = 0) => {
 			if (fractionTravelled === 0) { this.remainingMoveTime = 0; }
 			this.prevCursorPos = currCursorPos;
@@ -64,7 +64,10 @@ export default class SmoothTypingAnimation extends Plugin {
 
 		// If there has been a smoothMovement of the true cursor, we add to the movement time remaining
 		else if (charIncremented && !lineMoved) {
-			this.remainingMoveTime = this.characterMovementTime;
+			// If line changed then we want a sharpMovement
+			if (currCursorCoords.top !== this.prevCursorCoords.top) { this.remainingMoveTime = 0 }
+			//  Else it's a true smoothMovement
+			else { this.remainingMoveTime = this.characterMovementTime; }
 		}
 		
 		// Regardless of movement, we get the fraction of the total distance travelled (timeSinceLastFrame / remainingMovementTime)
@@ -117,7 +120,7 @@ export default class SmoothTypingAnimation extends Plugin {
 		// Get the fraction of total distance that the cursor icon should travel this frame
 		// nonzero if currently smoothly moving
 		// and turn it into a true distance
-		const iconMovementFraction = this.handleSmoothTyping(currCursorPos, timeSinceLastFrame);
+		const iconMovementFraction = this.handleSmoothTyping(currCursorPos, currCursorCoords, timeSinceLastFrame);
 		let currIconCoords;
 		if (iconMovementFraction !== 0 && this.prevIconCoords) {			
 			const movementThisFrame: Coordinates = {
