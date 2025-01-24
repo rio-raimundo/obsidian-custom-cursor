@@ -1,4 +1,4 @@
-import { Plugin, MarkdownView, Editor, App, PluginSettingTab, Setting, ButtonComponent, ColorComponent} from 'obsidian';
+import { Plugin, MarkdownView, Editor, App, PluginSettingTab, Setting, ButtonComponent, ColorComponent, SliderComponent} from 'obsidian';
 type Coordinates = { left: number; top: number};
 type Position = { line: number; ch: number };
 interface ExtendedEditor extends Editor { containerEl: HTMLElement; }
@@ -14,9 +14,7 @@ export default class SmoothTypingAnimation extends Plugin {
 	
 	prevFrameTime: number = Date.now();
 	blinkStartTime: number = Date.now();
-	blinkDuration = 1200;
 
-	characterMovementTime = 80;
 	remainingMoveTime = 0;
 
 	changeCursorColour(colour: string | null = null): void {
@@ -43,12 +41,12 @@ export default class SmoothTypingAnimation extends Plugin {
 		if (cursorPosChanged) { return resetCursor(); }
 
 		// Return an opacity of 1 for the first 'half' of the blink, then an opacity of 0 for the second half
-		const timePassed = Date.now() - this.blinkStartTime;
-		if (timePassed < this.blinkDuration/2) { return 1; }
-		else if (timePassed < this.blinkDuration) { return 0; }
-
-		// Once blink has been processed, reset the timer and return 1
-		return resetCursor();
+		// Should be modular, and loop forever until cursor moves
+		const timePassed = Date.now() - this.blinkStartTime - this.settings.blinkDelay*1000;
+		const blinkMs = this.settings.blinkSpeed*1000;
+		if (timePassed < 0) { return 1; }
+		if (timePassed % blinkMs < blinkMs/2) { return 1; }
+		else { return 0; }
 	}
 
 	// Handles smooth typing, and returns fraction of distance to travel this frame
@@ -76,7 +74,7 @@ export default class SmoothTypingAnimation extends Plugin {
 			// If line changed then we want a sharpMovement
 			if (currCursorCoords.top !== this.prevCursorCoords.top) { this.remainingMoveTime = 0 }
 			//  Else it's a true smoothMovement
-			else { this.remainingMoveTime = this.characterMovementTime; }
+			else { this.remainingMoveTime = this.settings.characterMovementTime; }
 		}
 		
 		// Regardless of movement, we get the fraction of the total distance travelled (timeSinceLastFrame / remainingMovementTime)
@@ -159,6 +157,7 @@ export default class SmoothTypingAnimation extends Plugin {
 			this.cursorElement.style.setProperty("--cursor-x1", `${currIconCoords.left}px`);
 			this.cursorElement.style.setProperty("--cursor-y1", `${currIconCoords.top}px`);
 			this.cursorElement.style.setProperty("--cursor-height", `${currCursorCoords.height}px`);
+			this.cursorElement.style.setProperty("--cursor-width", `${this.settings.cursorWidth}px`);
 			this.cursorElement.style.setProperty("--cursor-opacity", `${blinkOpacity}`);
 		}
 
@@ -205,7 +204,7 @@ interface SmoothTypingSettings {
 	cursorWidth: number;
 	cursorColor: string | null;
 }
-const DEFAULT_SETTINGS: Partial<SmoothTypingSettings> = {
+const DEFAULT_SETTINGS: SmoothTypingSettings = {
 	blinkSpeed: 1.2,
 	blinkDelay: 0,
 	characterMovementTime: 80,
@@ -228,91 +227,92 @@ export class SmoothTypingSettingsTab extends PluginSettingTab {
 
 		// CURSOR COLOUR SETTING
 		const cursorColorSetting = new Setting(this.containerEl)
-		.setName('Cursor colour')
-		.setDesc('The colour of the cursor icon. Defaults to (dark-mode dependent) black or white.');
-		
+			.setName('Cursor colour')
+			.setDesc('The colour of the cursor icon. Defaults to (dark-mode dependent) black or white.');
 		new ResetButtonComponent(cursorColorSetting.controlEl).onClick(async () => {
 			colorPicker.setValue('#ffffff');
 			this.plugin.settings.cursorColor = null; // Custom saving to not save the color black in the data.
 			this.plugin.changeCursorColour();
 			await this.plugin.saveSettings();
 		});
-
 		const colorPicker = new ColorComponent(cursorColorSetting.controlEl)
-		.setValue(this.plugin.settings.cursorColor ?? '#ffffff')
-		.onChange(async (value) => {
-			this.plugin.settings.cursorColor = value;
-			this.plugin.changeCursorColour(value);
-			await this.plugin.saveSettings();
+			.setValue(this.plugin.settings.cursorColor ?? '#ffffff')
+			.onChange(async (value) => {
+				this.plugin.settings.cursorColor = value;
+				this.plugin.changeCursorColour(value);
+				await this.plugin.saveSettings();
 		});
 
-		// SLIDER EXAMPLE
-		new Setting(this.containerEl)
+		// BLINK SPEED SLIDER
+		const blinkSpeedSetting = new Setting(this.containerEl)
 			.setName('Blink speed (in seconds)')
 			.setDesc('The number of seconds to complete one full cursor blink cycle.')
-			.addSlider((slider) => {
-				slider
-				.setLimits(0.2, 5, 0.1)
-				.setDynamicTooltip()
-				.setValue(
-					this.plugin.settings.blinkSpeed ??
-					DEFAULT_SETTINGS.blinkSpeed, // why??
-				)
-				.onChange(async (val) => {
-					this.plugin.settings.blinkSpeed = val;
-					await this.plugin.saveSettings();
-				});
+		new ResetButtonComponent(blinkSpeedSetting.controlEl)
+			.onClick(async () => {
+				blinkSpeedSlider.setValue(DEFAULT_SETTINGS.blinkSpeed);
+				await this.plugin.saveSettings();
+			});
+		const blinkSpeedSlider = new SliderComponent(blinkSpeedSetting.controlEl)
+			.setLimits(0.2, 5, 0.1)
+			.setDynamicTooltip()
+			.setValue(this.plugin.settings.blinkSpeed ?? DEFAULT_SETTINGS.blinkSpeed)
+			.onChange(async (val) => {
+				this.plugin.settings.blinkSpeed = val; // convert to ms
+				await this.plugin.saveSettings();
 			});
 
-			new Setting(this.containerEl)
+		// BLINK DELAY SLIDER
+		const blinkDelaySetting = new Setting(this.containerEl)
 			.setName('Blink delay (in seconds)')
 			.setDesc('The number of seconds after cursor movement before blinking begins.')
-			.addSlider((slider) => {
-				slider
-				.setLimits(0, 5, 0.1)
-				.setDynamicTooltip()
-				.setValue(
-					this.plugin.settings.characterMovementTime ??
-					DEFAULT_SETTINGS.characterMovementTime, // why??
-				)
-				.onChange(async (val) => {
-					this.plugin.settings.characterMovementTime = val;
-					await this.plugin.saveSettings();
-				});
+		new ResetButtonComponent(blinkDelaySetting.controlEl)
+			.onClick(async () => {
+				blinkDelaySlider.setValue(DEFAULT_SETTINGS.blinkDelay);
+				await this.plugin.saveSettings();
+			});
+		const blinkDelaySlider = new SliderComponent(blinkDelaySetting.controlEl)	
+			.setLimits(0, 5, 0.1)
+			.setDynamicTooltip()
+			.setValue( this.plugin.settings.blinkDelay ?? DEFAULT_SETTINGS.blinkDelay)
+			.onChange(async (val) => {
+				this.plugin.settings.blinkDelay = val;
+				await this.plugin.saveSettings();
 			});
 
-			new Setting(this.containerEl)
+		// SMOOTH TYPING SPEED SLIDER
+		const smoothTypingSetting = new Setting(this.containerEl)
 			.setName('Smooth typing speed (in milliseconds)')
 			.setDesc('The number of milliseconds for the cursor icon to reach the true cursor location after typing or moving the cursor. 0 for instant speed.')
-			.addSlider((slider) => {
-				slider
-				.setLimits(0, 200, 1)
-				.setDynamicTooltip()
-				.setValue(
-					this.plugin.settings.blinkDelay ??
-					DEFAULT_SETTINGS.blinkDelay, // why??
-				)
-				.onChange(async (val) => {
-					this.plugin.settings.blinkDelay = val;
-					await this.plugin.saveSettings();
-				});
+		new ResetButtonComponent(smoothTypingSetting.controlEl)
+			.onClick(async () => {
+				smoothTypingSpeedSlider.setValue(DEFAULT_SETTINGS.characterMovementTime);
+				await this.plugin.saveSettings();
 			});
-
-			new Setting(this.containerEl)
+		const smoothTypingSpeedSlider = new SliderComponent(smoothTypingSetting.controlEl)
+			.setLimits(0, 200, 1)
+			.setDynamicTooltip()
+			.setValue(this.plugin.settings.characterMovementTime ?? DEFAULT_SETTINGS.blinkDelay)
+			.onChange(async (val) => {
+				this.plugin.settings.characterMovementTime = val;
+				await this.plugin.saveSettings();
+			});
+		
+		// CURSOR WIDTH SLIDER
+		const cursorWidthSetting = new Setting(this.containerEl)
 			.setName('Cursor width (in pixels)')
 			.setDesc('The width of the cursor icon in pixels.')
-			.addSlider((slider) => {
-				slider
-				.setLimits(1, 5, 1)
-				.setDynamicTooltip()
-				.setValue(
-					this.plugin.settings.cursorWidth ??
-					DEFAULT_SETTINGS.cursorWidth, // why??
-				)
-				.onChange(async (val) => {
-					this.plugin.settings.cursorWidth = val;
-					await this.plugin.saveSettings();
-				});
+		new ResetButtonComponent(cursorWidthSetting.controlEl)
+			.onClick(async () => {
+				cursorWidthSlider.setValue(DEFAULT_SETTINGS.cursorWidth);
+				await this.plugin.saveSettings();	
+			});
+		const cursorWidthSlider = new SliderComponent(cursorWidthSetting.controlEl)
+			.setLimits(1, 5, 1)
+			.setDynamicTooltip()
+			.setValue(this.plugin.settings.cursorWidth ?? DEFAULT_SETTINGS.cursorWidth)
+			.onChange(async (val) => {
+				this.plugin.settings.cursorWidth = val;
+				await this.plugin.saveSettings();
 			});
 	}
 }
