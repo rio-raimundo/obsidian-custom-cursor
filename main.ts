@@ -193,7 +193,7 @@ interface SmoothTypingSettings {
 	blinkDelay: number;
 	characterMovementTime: number;
 	cursorWidth: number;
-	cursorColor: string;
+	cursorColor: string | null;
 }
 const DEFAULT_SETTINGS: Partial<SmoothTypingSettings> = {
 	blinkSpeed: 1.2,
@@ -215,21 +215,23 @@ export class SmoothTypingSettingsTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-		
 
-		// DROPDOWN LIST EXAMPLE
-		new Setting(this.containerEl)
-			.setName('Cursor colour')
-			.setDesc('Change the colour of the cursor icon.')
-			.addDropdown((dropdown) => {
-				dropdown.addOption('white', 'White');
-				dropdown.addOption('black', 'Black');
-				dropdown.setValue(this.plugin.settings.cursorColor);
-				dropdown.onChange(async (value: 'white' | 'black') => {
-					this.plugin.settings.cursorColor = value;
-					await this.plugin.saveSettings();
-				});
-			});
+		const cursorColorSetting = new Setting(this.containerEl)
+		.setName('Cursor colour')
+		.setDesc('The colour of the cursor icon.');
+		
+		new ResetButtonComponent(cursorColorSetting.controlEl).onClick(async () => {
+			colorPicker.setValue(DEFAULT_SETTINGS.cursorColor ?? '#ffffff');
+			this.plugin.settings.cursorColor = null; // Custom saving to not save the color black in the data.
+			await this.plugin.saveSettings();
+		});
+
+		const colorPicker = new ColorComponent(cursorColorSetting.controlEl)
+		.setValue(this.plugin.settings.cursorColor ?? '#ffffff')
+		.onChange(async (value) => {
+			this.plugin.settings.cursorColor = value;
+			await this.plugin.saveSettings();
+		});
 
 		// SLIDER EXAMPLE
 		new Setting(this.containerEl)
@@ -298,23 +300,6 @@ export class SmoothTypingSettingsTab extends PluginSettingTab {
 					this.plugin.settings.cursorWidth = val;
 					await this.plugin.saveSettings();
 				});
-			});
-
-			const iconColorSetting = new Setting(this.containerEl)
-			.setName('Icon color')
-			.setDesc('Change the color of the displayed icons.');
-			
-			new ResetButtonComponent(iconColorSetting.controlEl).onClick(async () => {
-				colorPicker.setValue(DEFAULT_SETTINGS.cursorColor ?? '#ffffff');
-			// Custom saving to not save the color black in the data.
-			await this.plugin.saveSettings();
-			});
-
-			const colorPicker = new ColorComponent(iconColorSetting.controlEl)
-			.setValue(this.plugin.settings.cursorColor ?? DEFAULT_SETTINGS.cursorColor)
-			.onChange(async (value) => {
-				this.plugin.settings.cursorColor = value;
-				await this.plugin.saveSettings();
 			});
 	}
 }
