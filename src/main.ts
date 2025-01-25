@@ -9,6 +9,7 @@ export default class SmoothTypingAnimation extends Plugin {
 	settings: SmoothTypingSettings;
 	cursorElement: HTMLSpanElement;
 	isInWindow = true;
+	isFirstFrame = true;
 
 	mouseDown = false;
 	mouseUpThisFrame = false;
@@ -156,7 +157,7 @@ export default class SmoothTypingAnimation extends Plugin {
 	private bringIconBack() { this.cursorElement.style.display = 'block'; }
 
 	// Main function, called every frame
-	updateCursor(firstFrame = false) {
+	updateCursor() {
 		// Function that will be called on return
 		const scheduleNextUpdate = () => {
 			this.mouseUpThisFrame = false;
@@ -180,7 +181,7 @@ export default class SmoothTypingAnimation extends Plugin {
 
 		// Now we can handle blinking and check if icon should be smoothly moving (assigns to currIconCoords)
 		const blinkOpacity = this.blinkCursor();
-		if (firstFrame) { this.currIconCoords = this.currCursorCoords; }
+		if (this.isFirstFrame) { this.currIconCoords = this.currCursorCoords; this.isFirstFrame = false; }
 		else { this.moveSmoothly(this.checkSmoothMovement(this.currCursorCoords), this.timeSinceLastFrame); }
 
 		// Send cursor details to .css to render
