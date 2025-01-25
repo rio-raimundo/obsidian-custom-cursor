@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "obsidian-custom-cursor",
 	"version": "1.0.0",
-	"description": "Adds a smooth cursor animation when typing in the editor.",
+	"description": "Add cursor customisability options, including a smooth typing animation.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
