@@ -5,14 +5,14 @@ import SmoothTypingAnimation from './main';
 export interface SmoothTypingSettings {
 	blinkSpeed: number;
 	blinkDelay: number;
-	characterMovementTime: number;
+	movementTime: number;
 	cursorWidth: number;
 	cursorColor: string | null;
 }
 export const DEFAULT_SETTINGS: SmoothTypingSettings = {
 	blinkSpeed: 1.2,
 	blinkDelay: 0,
-	characterMovementTime: 80,
+	movementTime: 80,
 	cursorWidth: 1,
 	cursorColor: '#ffffff',
 };
@@ -89,15 +89,15 @@ export class SmoothTypingSettingsTab extends PluginSettingTab {
 			.setDesc('The number of milliseconds for the cursor icon to reach the true cursor location after typing or moving the cursor. 0 for instant speed.')
 		new ResetButtonComponent(smoothTypingSetting.controlEl)
 			.onClick(async () => {
-				smoothTypingSpeedSlider.setValue(DEFAULT_SETTINGS.characterMovementTime);
+				smoothTypingSpeedSlider.setValue(DEFAULT_SETTINGS.movementTime);
 				await this.plugin.saveSettings();
 			});
 		const smoothTypingSpeedSlider = new SliderComponent(smoothTypingSetting.controlEl)
 			.setLimits(0, 200, 1)
 			.setDynamicTooltip()
-			.setValue(this.plugin.settings.characterMovementTime ?? DEFAULT_SETTINGS.blinkDelay)
+			.setValue(this.plugin.settings.movementTime ?? DEFAULT_SETTINGS.blinkDelay)
 			.onChange(async (val) => {
-				this.plugin.settings.characterMovementTime = val;
+				this.plugin.settings.movementTime = val;
 				await this.plugin.saveSettings();
 			});
 		

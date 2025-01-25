@@ -10,12 +10,17 @@ export default class SmoothTypingAnimation extends Plugin {
 	cursorElement: HTMLSpanElement;
 	isInWindow = true;
 
+	clickThisFrame = false;
+
 	prevCursorCoords: Coordinates = { left: 0, top: 0};  // measured in px
+	currCursorCoords: Coordinates = { left: 0, top: 0 };
+	currCursorHeight: number;
 	prevCursorPos: Position | null = { line: 0, ch: 0 };  // measured in line and character
 	prevIconCoords: Coordinates | null = { left: 0, top: 0 };  // coordinates of the visible 'icon' (not cursor itself)
 	
 	prevFrameTime: number = Date.now();
 	blinkStartTime: number = Date.now();
+	timeSinceLastFrame: number;
 
 	remainingMoveTime = 0;
 
@@ -46,6 +51,61 @@ export default class SmoothTypingAnimation extends Plugin {
 		else { return 0; }
 	}
 
+	// Smooth typing function that returns whether anything has started or violated a smooth movement on this frame.
+	private getCursorIconState(selection: Selection | null, editor: ExtendedEditor | null, currCursorCoords: Coordinates): number {
+		/* KEY: 
+			-1 if icon should not exist
+			0 if icon should be at currCursorLocation
+			1 if icon should be smoothly moving
+		*/
+
+		// If there is not a currently active selection and editor which is focused, then the icon should not be displayed
+		if (
+			!selection || !selection.focusNode ||
+			!editor || !editor.containerEl ||
+			!editor.containerEl.className.includes('cm-focused')
+		) {
+			return -1;
+		}
+
+		// Get reference to current cursor in terms of {line, ch}. If it does not exist, no need to render cursor
+		const currCursorPos: Position = editor.getCursor();
+		if (!currCursorPos || !this.prevCursorPos) { return -1; }
+
+		// If the iconCoords and cursorCoords are the same, then we do not need a smoothMovement
+		// Similarly, if there has been a click this frame, we want a sharpMovement
+		if (
+			(this.prevIconCoords && 
+			this.prevIconCoords.left === currCursorCoords.left &&
+			this.prevIconCoords.top === currCursorCoords.top) ||
+			(this.clickThisFrame)
+		) {
+			return 0;
+		}
+
+		// Otherwise, we want a smoothMovement! But finally, we should check if the cursorPosition has changed this frame - if it has, we reset the remainingMoveTime to initialise the smoothMovement
+		if (
+			this.prevCursorPos.line !== currCursorPos.line ||
+			this.prevCursorPos.ch !== currCursorPos.ch
+		) {
+			this.remainingMoveTime = this.settings.movementTime;
+		}
+		return 1;
+	}
+
+	// Handle the interpolation of the cursor icon for the smoothMovement
+	private moveSmoothly(timeSinceLastFrame: number): number {
+		if (this.remainingMoveTime <= 0) {
+			this.remainingMoveTime = 0;
+			return 0;
+		}
+
+		// Calculate the fraction of the remaining time that has passed since the last frame
+		const fractionTravelled = Math.min(timeSinceLastFrame / this.remainingMoveTime, 1);
+		this.remainingMoveTime = Math.max(0, this.remainingMoveTime - timeSinceLastFrame);
+		return fractionTravelled;
+	}
+
 	// Handles smooth typing, and returns fraction of distance to travel this frame
 	private handleSmoothTyping(currCursorPos: Position | null, currCursorCoords: Coordinates, timeSinceLastFrame: number): number {
 		const returnStatement = (fractionTravelled = 0) => {
@@ -64,6 +124,7 @@ export default class SmoothTypingAnimation extends Plugin {
 		// If there has been a sharpMovement of the true cursor, we cancel the smooth movement of the icon
 		if ((charMoved && !charIncremented) || (lineMoved)) {
 			this.remainingMoveTime = 0;
+			console.log('sharp movement')
 		}
 
 		// If there has been a smoothMovement of the true cursor, we add to the movement time remaining
@@ -71,7 +132,7 @@ export default class SmoothTypingAnimation extends Plugin {
 			// If line changed then we want a sharpMovement
 			if (currCursorCoords.top !== this.prevCursorCoords.top) { this.remainingMoveTime = 0 }
 			//  Else it's a true smoothMovement
-			else { this.remainingMoveTime = this.settings.characterMovementTime; }
+			else { this.remainingMoveTime = this.settings.movementTime; }
 		}
 		
 		// Regardless of movement, we get the fraction of the total distance travelled (timeSinceLastFrame / remainingMovementTime)
@@ -98,37 +159,48 @@ export default class SmoothTypingAnimation extends Plugin {
 		return timeSinceLastFrame;
 	}
 
+	private updateCurrCursorCoords(selection: Selection): void {
+		if (!selection || !selection.focusNode) { return;}
+		
+		// Take the focused 'node', turn it into a range from start to finish
+		// Have to handle 0 as a special case so that the cursor shows up on empty lines, not sure why
+		const cursorRange = document.createRange();
+		cursorRange.setStart(selection.focusNode, selection.focusOffset);
+		if (selection.focusOffset === 0) { cursorRange.setEnd(selection.focusNode, 1); }
+		else { cursorRange.setEnd(selection.focusNode, selection.focusOffset); }
+		const cursorInfo = cursorRange.getBoundingClientRect();
+
+		// Assign values
+		this.currCursorCoords = { left: cursorInfo.left, top: cursorInfo.top };
+		this.currCursorHeight = cursorInfo.height;
+	}
+
 	private removeIcon() { this.cursorElement.style.display = 'none'; }
 	private bringIconBack() { this.cursorElement.style.display = 'block'; }
 
 	// Main function, called every frame
 	updateCursor() {
 		// Function that will be called on return
-		const scheduleNextUpdate = () => { requestAnimationFrame(this.updateCursor.bind(this)); }
+		const scheduleNextUpdate = () => {
+			this.clickThisFrame = false;
+			requestAnimationFrame(this.updateCursor.bind(this));
+		}
 
+		// Handle things which need updating on each frame
 		// Keep track of time on each frame, and how much has elapsed
-		const timeSinceLastFrame = this.getTimeSinceLastFrame();
-
-		// Get needed references and return if there is no selection
+		this.timeSinceLastFrame = this.getTimeSinceLastFrame();
 		const { selection, editor } = this.returnReferences();
+
 		if (!selection || !selection.focusNode) { return scheduleNextUpdate(); }
 		if (!editor || !editor.containerEl || !editor.containerEl.className.includes('cm-focused')) { this.removeIcon(); return scheduleNextUpdate(); }
 		else { this.bringIconBack(); }
 		
 		// If cursor position does not exist, we should also not render it
 		const currCursorPos: Position = editor.getCursor();
-		
-		// Take the focused 'node', turn it into a range from start to finish
-		const cursorRange = document.createRange();
-
-		// Have to handle 0 as a special case so that the cursor shows up on empty lines, not sure why
-		cursorRange.setStart(selection.focusNode, selection.focusOffset);
-		if (selection.focusOffset === 0) { cursorRange.setEnd(selection.focusNode, 1); }
-		else { cursorRange.setEnd(selection.focusNode, selection.focusOffset); }
-		const currCursorCoords = cursorRange.getBoundingClientRect();
+		this.updateCurrCursorCoords(selection); // updates coords and height
 
 		// Check if cursor position has changed
-		const cursorCoordinatesChanged = (this.prevCursorCoords.left !== currCursorCoords.left || this.prevCursorCoords.top !== currCursorCoords.top);
+		const cursorCoordinatesChanged = (this.prevCursorCoords.left !== this.currCursorCoords.left || this.prevCursorCoords.top !== this.currCursorCoords.top);
 
 		// Calculate current cursor opacity 
 		const blinkOpacity = this.blinkCursor(cursorCoordinatesChanged);
@@ -136,37 +208,33 @@ export default class SmoothTypingAnimation extends Plugin {
 		// Get the fraction of total distance that the cursor icon should travel this frame
 		// nonzero if currently smoothly moving
 		// and turn it into a true distance
-		const iconMovementFraction = this.handleSmoothTyping(currCursorPos, currCursorCoords, timeSinceLastFrame);
+		const iconMovementFraction = this.handleSmoothTyping(currCursorPos, this.currCursorCoords, this.timeSinceLastFrame);
 		let currIconCoords;
 		if (iconMovementFraction !== 0 && this.prevIconCoords) {			
 			const movementThisFrame: Coordinates = {
-				left: iconMovementFraction * (currCursorCoords.left - this.prevIconCoords.left),
-				top: iconMovementFraction * (currCursorCoords.top - this.prevIconCoords.top)
+				left: iconMovementFraction * (this.currCursorCoords.left - this.prevIconCoords.left),
+				top: iconMovementFraction * (this.currCursorCoords.top - this.prevIconCoords.top)
 			};
 			currIconCoords = {
 				left: this.prevIconCoords.left + movementThisFrame.left,
 				top: this.prevIconCoords.top + movementThisFrame.top
 			};
-			console.log(editor.cm.inputState);
 		}
 		else {
-			currIconCoords = currCursorCoords;
+			currIconCoords = this.currCursorCoords;
 		}
 
 		// Send cursor details to .css to render
 		if (currIconCoords) {
 			this.cursorElement.style.setProperty("--cursor-x1", `${currIconCoords.left}px`);
 			this.cursorElement.style.setProperty("--cursor-y1", `${currIconCoords.top}px`);
-			this.cursorElement.style.setProperty("--cursor-height", `${currCursorCoords.height}px`);
+			this.cursorElement.style.setProperty("--cursor-height", `${this.currCursorHeight}px`);
 			this.cursorElement.style.setProperty("--cursor-width", `${this.settings.cursorWidth}px`);
 			this.cursorElement.style.setProperty("--cursor-opacity", `${blinkOpacity}`);
 		}
 
-		//  Update this.lastPos and recall
-		this.prevCursorCoords = {
-			left: currCursorCoords.left,
-			top: currCursorCoords.top,
-		}
+		//  Update values on every frame and recall
+		this.prevCursorCoords = this.currCursorCoords;
 		this.prevIconCoords = currIconCoords;
 
 		// Schedule next update
@@ -181,6 +249,9 @@ export default class SmoothTypingAnimation extends Plugin {
 		// Set the default cursor colour based on the theme
 		this.cursorElement = document.body.createSpan({ cls: "custom-cursor", });
 		this.changeCursorColour();  // resets if no arguments given
+
+		// Add custom listeners for clicking and keypresses
+		document.addEventListener('click', () => { this.clickThisFrame = true; });
 
 		// Initialise variables and schedule our first function call, which will be recalled once per frame.
 		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
