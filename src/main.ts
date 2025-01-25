@@ -27,11 +27,6 @@ export default class SmoothTypingAnimation extends Plugin {
 		this.cursorElement.style.setProperty("--cursor-color", colour);
 	}
 
-	// Contains the architecture which will be called when the main function needs to return
-	private scheduleNextUpdate() {
-		requestAnimationFrame(this.updateCursor.bind(this));
-	}
-
 	//  Handles blinking of cursor and resets if it moves
 	private blinkCursor(cursorPosChanged: boolean): number {
 		const resetCursor = () => {
@@ -108,13 +103,16 @@ export default class SmoothTypingAnimation extends Plugin {
 
 	// Main function, called every frame
 	updateCursor() {
+		// Function that will be called on return
+		const scheduleNextUpdate = () => { requestAnimationFrame(this.updateCursor.bind(this)); }
+
 		// Keep track of time on each frame, and how much has elapsed
 		const timeSinceLastFrame = this.getTimeSinceLastFrame();
 
 		// Get needed references and return if there is no selection
 		const { selection, editor } = this.returnReferences();
-		if (!selection || !selection.focusNode) { return this.scheduleNextUpdate(); }
-		if (!editor || !editor.containerEl || !editor.containerEl.className.includes('cm-focused')) {  this.removeIcon(); return this.scheduleNextUpdate(); }
+		if (!selection || !selection.focusNode) { return scheduleNextUpdate(); }
+		if (!editor || !editor.containerEl || !editor.containerEl.className.includes('cm-focused')) { this.removeIcon(); return scheduleNextUpdate(); }
 		else { this.bringIconBack(); }
 		
 		// If cursor position does not exist, we should also not render it
@@ -149,6 +147,7 @@ export default class SmoothTypingAnimation extends Plugin {
 				left: this.prevIconCoords.left + movementThisFrame.left,
 				top: this.prevIconCoords.top + movementThisFrame.top
 			};
+			console.log(editor.cm.inputState);
 		}
 		else {
 			currIconCoords = currCursorCoords;
@@ -171,7 +170,7 @@ export default class SmoothTypingAnimation extends Plugin {
 		this.prevIconCoords = currIconCoords;
 
 		// Schedule next update
-		return this.scheduleNextUpdate();
+		return scheduleNextUpdate();
 	}
 
 	async onload() {
@@ -185,7 +184,7 @@ export default class SmoothTypingAnimation extends Plugin {
 
 		// Initialise variables and schedule our first function call, which will be recalled once per frame.
 		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
-		this.scheduleNextUpdate();
+		this.updateCursor();
 	}
 
 	async loadSettings() {
