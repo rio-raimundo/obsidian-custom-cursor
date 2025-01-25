@@ -10,7 +10,8 @@ export default class SmoothTypingAnimation extends Plugin {
 	cursorElement: HTMLSpanElement;
 	isInWindow = true;
 
-	clickThisFrame = false;
+	mouseDown = false;
+	mouseUpThisFrame = false;
 
 	prevCursorCoords: Coordinates = { left: 0, top: 0};  // measured in px
 	currCursorCoords: Coordinates = { left: 0, top: 0 };
@@ -78,11 +79,12 @@ export default class SmoothTypingAnimation extends Plugin {
 	private checkSmoothMovement(currCursorCoords: Coordinates): boolean {
 		// If the iconCoords and cursorCoords are the same, then we do not need a smoothMovement
 		// Similarly, if there has been a click this frame, we want a sharpMovement
+		// Also look out for a mouseUp on this frame, because if text is selected and you click somewhere else, the mouse only moves on mouseUp (full click)
 		if (
 			(this.prevIconCoords && 
 			this.prevIconCoords.left === currCursorCoords.left &&
 			this.prevIconCoords.top === currCursorCoords.top) ||
-			(this.clickThisFrame)
+			(this.mouseDown || this.mouseUpThisFrame)
 		) {
 			return false;
 		}
@@ -154,10 +156,10 @@ export default class SmoothTypingAnimation extends Plugin {
 	private bringIconBack() { this.cursorElement.style.display = 'block'; }
 
 	// Main function, called every frame
-	updateCursor() {
+	updateCursor(firstFrame = false) {
 		// Function that will be called on return
 		const scheduleNextUpdate = () => {
-			this.clickThisFrame = false;
+			this.mouseUpThisFrame = false;
 			requestAnimationFrame(this.updateCursor.bind(this));
 		}
 
@@ -178,7 +180,8 @@ export default class SmoothTypingAnimation extends Plugin {
 
 		// Now we can handle blinking and check if icon should be smoothly moving (assigns to currIconCoords)
 		const blinkOpacity = this.blinkCursor();
-		this.moveSmoothly(this.checkSmoothMovement(this.currCursorCoords), this.timeSinceLastFrame);
+		if (firstFrame) { this.currIconCoords = this.currCursorCoords; }
+		else { this.moveSmoothly(this.checkSmoothMovement(this.currCursorCoords), this.timeSinceLastFrame); }
 
 		// Send cursor details to .css to render
 		this.cursorElement.style.setProperty("--cursor-x1", `${this.currIconCoords.left}px`);
@@ -205,7 +208,8 @@ export default class SmoothTypingAnimation extends Plugin {
 		this.changeCursorColour();  // resets if no arguments given
 
 		// Add custom listeners for clicking and keypresses
-		document.addEventListener('mousedown', () => { this.clickThisFrame = true; });
+		document.addEventListener('mousedown', () => { this.mouseDown = true; });
+		document.addEventListener('mouseup', () => { this.mouseDown = false; this.mouseUpThisFrame = true;});
 
 		// Initialise variables and schedule our first function call, which will be recalled once per frame.
 		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
