@@ -103,6 +103,7 @@ export default class SmoothTypingAnimation extends Plugin {
 		if (!isMovingSmoothly || this.remainingMoveTime <= 0) {
 			this.remainingMoveTime = 0;
 			this.currIconCoords = this.currCursorCoords;
+			return;
 		}
 
 		// Otherwise calculate the fraction of the remaining time that has passed since the last frame
@@ -204,7 +205,7 @@ export default class SmoothTypingAnimation extends Plugin {
 		this.changeCursorColour();  // resets if no arguments given
 
 		// Add custom listeners for clicking and keypresses
-		document.addEventListener('click', () => { this.clickThisFrame = true; });
+		document.addEventListener('mousedown', () => { this.clickThisFrame = true; });
 
 		// Initialise variables and schedule our first function call, which will be recalled once per frame.
 		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
