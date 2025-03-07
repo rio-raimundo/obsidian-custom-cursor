@@ -36,14 +36,14 @@ export class SmoothTypingSettingsTab extends PluginSettingTab {
 		new ResetButtonComponent(cursorColorSetting.controlEl).onClick(async () => {
 			colorPicker.setValue('#ffffff');
 			this.plugin.settings.cursorColor = null; // Custom saving to not save the color black in the data.
-			this.plugin.changeCursorColour();
+			this.plugin.setCursorColour();
 			await this.plugin.saveSettings();
 		});
 		const colorPicker = new ColorComponent(cursorColorSetting.controlEl)
 			.setValue(this.plugin.settings.cursorColor ?? '#ffffff')
 			.onChange(async (value) => {
 				this.plugin.settings.cursorColor = value;
-				this.plugin.changeCursorColour(value);
+				this.plugin.setCursorColour(value);
 				await this.plugin.saveSettings();
 		});
 

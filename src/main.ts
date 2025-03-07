@@ -26,16 +26,134 @@ export default class SmoothTypingAnimation extends Plugin {
 	
 	prevFrameTime: number = Date.now();
 	blinkStartTime: number = Date.now();
-	timeSinceLastFrame: number;
 
 	remainingMoveTime = 0;
-
-
-
-
-
 	
-	changeCursorColour(colour: string | null = null): void {
+
+
+	/* FUNCTIONS WHICH ARE CALLED BY OBSIDIAN DIRECTLY */
+	async onload() {
+		// Load settings
+		await this.loadSettings();
+
+		// Create the cursor element, and apply the custom class cursor to it
+		this.initialiseCursor();
+
+		// Add custom listeners for clicking and keypresses
+		document.addEventListener('mousedown', () => { this.mouseDown = true; });
+		document.addEventListener('mouseup', () => { this.mouseDown = false; this.mouseUpThisFrame = true;});
+
+		// Initialise variables and schedule our first function call, which will be recalled once per frame.
+		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
+		this.animateCursor();  // call parent function which will be called once per frame
+	}
+
+	// Initial functions
+	initialiseCursor() {
+		this.cursorElement = document.body.createSpan({ cls: "custom-cursor", });
+		this.setCursorColour();  // resets if no arguments given
+	}
+	async loadSettings() {
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.addSettingTab(new SmoothTypingSettingsTab(this.app, this));
+	}
+	async saveSettings() { await this.saveData(this.settings); }
+
+
+
+	/* PARENT FUNCTIONS */
+	/**
+	 * Parent function which runs every frame. Divorced from main architecture so that errors don't stop the cursor from rendering forever.
+	 * Everything sould be wrapped safely within a try/catch statements so that this function will always be called every frame
+	 * @returns - Nothing
+	 */
+	private animateCursor() {
+		// Assign return statement to ensure function is always called
+		const returnStatement = () => {
+			this.mouseUpThisFrame = false;
+			requestAnimationFrame(this.animateCursor.bind(this));
+		};
+
+		// Main try loop to ensure that we always call the return statement
+		try {
+			// First we define the variables that we will need
+			const timeSinceLastFrame = this.getTimeSinceLastFrame();
+			const { selection, editor } = this.returnReferences();
+
+			// Check if cursor in a legal state; return if not
+			// Add additional (unnecessary) non-null checks to appease TypeScript... not sure if more elegant way to do this.
+			if (!this.checkLegalCursor(selection, editor) || !selection || !editor) { return returnStatement(); }
+
+			// If cursor is legal, update the info including position and coords
+			this.updateCursorInfo(selection, editor);
+
+			// Now we handle cursor blinking and assign the correct opacity (resetting on cursor movement)
+			this.setCursorBlinkOpacity();
+
+			// Call our main function to update the cursor position
+			this.updateCursorPosition(timeSinceLastFrame, selection, editor);
+		}
+		catch (error) { console.error(error); }
+
+		return returnStatement();
+	}
+
+	/**
+	 * Main function to check if the cursor is in a legal state and should be visible.
+	 * A legal state is defined as a currently active selection and editor which is focused.
+	 * @param selection - The current selection.
+	 * @param editor - The current editor.
+	 * @returns - True if the cursor is legal, false if it is not.
+	 */
+	private checkLegalCursor(selection: Selection | null, editor: ExtendedEditor | null): boolean {
+		/**
+		 * Helper function to set the display state of the cursor icon.
+		 * @param state - 'block' to show the icon, 'none' to hide it.
+		 * If the current state matches the desired state, does nothing.
+		 */
+		const setIconState = (state: string) => {
+			if (this.cursorElement.style.display === state) { return; }
+			this.cursorElement.style.display = state;
+		}
+
+		// Define what happens if cursor is legal or illegal
+		const legalCursor = () => {setIconState('block'); return true; }
+		const illegalCursor = () => {setIconState('none'); return false; }
+
+		// If there is not a currently active selection and editor which is focused, then the icon should not be displayed
+		if (
+			!selection || !selection.focusNode ||
+			!editor || !editor.containerEl ||
+			!editor.containerEl.className.includes('cm-focused') ||
+			!editor.getCursor()
+		) {
+			return illegalCursor();
+		}
+		
+		// Otherwise, our cursor is legal and should exist (and we should continue with the code)
+		return legalCursor();
+	}
+
+	// Main function to update position of the cursor
+	private updateCursorPosition(timeSinceLastFrame: number, selection: Selection, editor: ExtendedEditor) {
+		if (this.isFirstFrame) { this.currIconCoords = this.currCursorCoords; this.isFirstFrame = false; }
+		else { this.moveSmoothly(this.checkSmoothMovement(this.currCursorCoords), timeSinceLastFrame); }
+
+		// Send cursor details to .css to render
+		this.cursorElement.style.setProperty("--cursor-x1", `${this.currIconCoords.left}px`);
+		this.cursorElement.style.setProperty("--cursor-y1", `${this.currIconCoords.top}px`);
+		this.cursorElement.style.setProperty("--cursor-height", `${this.currCursorHeight}px`);
+		this.cursorElement.style.setProperty("--cursor-width", `${this.settings.cursorWidth}px`);
+
+		//  Update values on every frame and recall
+		this.prevCursorCoords = this.currCursorCoords;
+		this.prevIconCoords = this.currIconCoords;
+		return
+	}
+
+
+	/* HELPER FUNCTIONS */
+	setCursorColour(colour: string | null = null): void {
 		if (colour === null) {
 			const isLightTheme = document.body.classList.contains('theme-dark') ? false : true;
 			colour = isLightTheme ? `#000000` : `#ffffff`
@@ -44,41 +162,28 @@ export default class SmoothTypingAnimation extends Plugin {
 	}
 
 	//  Handles blinking of cursor and resets if it moves
-	private blinkCursor(): number {
-		const resetCursor = () => {
-			requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
-			return 1;
+	private setCursorBlinkOpacity() {
+		const returnStatement = (blinkOpacity: number) => {
+			this.cursorElement.style.setProperty("--cursor-opacity", `${blinkOpacity}`);
 		}
 
 		// Check if cursor position has changed
-		const cursorCoordsChanged = (this.prevCursorCoords.left !== this.currCursorCoords.left || this.prevCursorCoords.top !== this.currCursorCoords.top);
-		if (cursorCoordsChanged) { return resetCursor(); }
+		const cursorCoordsChanged = (
+			this.prevCursorCoords.left !== this.currCursorCoords.left ||
+			this.prevCursorCoords.top !== this.currCursorCoords.top
+		);
+		if (cursorCoordsChanged) {
+			requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
+			return returnStatement(1);
+		}
 
 		// Return an opacity of 1 for the first 'half' of the blink, then an opacity of 0 for the second half
 		// Should be modular, and loop forever until cursor moves
 		const timePassed = Date.now() - this.blinkStartTime - this.settings.blinkDelay*1000;
 		const blinkMs = this.settings.blinkSpeed*1000;
-		if (timePassed < 0) { return 1; }
-		if (timePassed % blinkMs < blinkMs/2) { return 1; }
-		else { return 0; }
-	}
-
-	private checkCursorExists(selection: Selection | null, editor: ExtendedEditor | null): boolean {
-		// If there is not a currently active selection and editor which is focused, then the icon should not be displayed
-		if (
-			!selection || !selection.focusNode ||
-			!editor || !editor.containerEl ||
-			!editor.containerEl.className.includes('cm-focused')
-		) {
-			return false;
-		}
-
-		// Get reference to current cursor in terms of {line, ch}. If it does not exist, no need to render cursor, and do not update pos
-		const currCursorPos = editor.getCursor();
-		if (!currCursorPos) { return false; }
-
-		this.currCursorPos = currCursorPos;
-		return true;
+		if (timePassed < 0) { return returnStatement(1); }
+		if (timePassed % blinkMs < blinkMs/2) { return returnStatement(1); }
+		else { return returnStatement(0); }
 	}
 
 	// Smooth typing function that returns whether anything has started or violated a smooth movement on this frame.
@@ -142,8 +247,12 @@ export default class SmoothTypingAnimation extends Plugin {
 		return timeSinceLastFrame;
 	}
 
-	private updateCurrCursorCoords(selection: Selection): void {
-		if (!selection || !selection.focusNode) { return;}
+	private updateCursorInfo(selection: Selection, editor: ExtendedEditor): void {
+		// Update current cursor pos in terms of character and line
+		this.currCursorPos = editor.getCursor();
+
+		// Confirm that selection has focused node
+		if (!selection.focusNode) { return; }
 		
 		// Take the focused 'node', turn it into a range from start to finish
 		// Have to handle 0 as a special case so that the cursor shows up on empty lines, not sure why
@@ -153,80 +262,8 @@ export default class SmoothTypingAnimation extends Plugin {
 		else { cursorRange.setEnd(selection.focusNode, selection.focusOffset); }
 		const cursorInfo = cursorRange.getBoundingClientRect();
 
-		// Assign values
+		// Assign coordinates and height values
 		this.currCursorCoords = { left: cursorInfo.left, top: cursorInfo.top };
 		this.currCursorHeight = cursorInfo.height;
 	}
-
-	private removeIcon() { this.cursorElement.style.display = 'none'; }
-	private bringIconBack() { this.cursorElement.style.display = 'block'; }
-
-	// General function that's called every frame
-	updateCursor() {
-		// Handle things which need updating on each frame
-		// Keep track of time on each frame, and how much has elapsed
-		this.timeSinceLastFrame = this.getTimeSinceLastFrame();
-		const { selection, editor } = this.returnReferences();
-
-		// If cursor is not in a legal state, remove the cursor icon and exit
-		if (!selection || !editor || !this.checkCursorExists(selection, editor)) {
-			this.removeIcon();
-			return;
-		}
-
-		// If cursor icon should exist, we render it and update the coordinates for the frame
-		this.bringIconBack();
-		this.updateCurrCursorCoords(selection); // updates coords and height
-
-		// Now we can handle blinking and check if icon should be smoothly moving (assigns to currIconCoords)
-		const blinkOpacity = this.blinkCursor();
-		if (this.isFirstFrame) { this.currIconCoords = this.currCursorCoords; this.isFirstFrame = false; }
-		else { this.moveSmoothly(this.checkSmoothMovement(this.currCursorCoords), this.timeSinceLastFrame); }
-
-		// Send cursor details to .css to render
-		this.cursorElement.style.setProperty("--cursor-x1", `${this.currIconCoords.left}px`);
-		this.cursorElement.style.setProperty("--cursor-y1", `${this.currIconCoords.top}px`);
-		this.cursorElement.style.setProperty("--cursor-height", `${this.currCursorHeight}px`);
-		this.cursorElement.style.setProperty("--cursor-width", `${this.settings.cursorWidth}px`);
-		this.cursorElement.style.setProperty("--cursor-opacity", `${blinkOpacity}`);
-
-		//  Update values on every frame and recall
-		this.prevCursorCoords = this.currCursorCoords;
-		this.prevIconCoords = this.currIconCoords;
-
-		return
-	}
-
-	// Parent function which runs every frame. Divorced from main architecture so that errors don't stop the cursor from rendering forever.
-	// Everything sould be safely within try/catch statements so that this function will always be called every frame
-	animateCursor() {
-		try { this.updateCursor(); }
-		catch (error) { console.error("Error in animateCursor:", error); }
-
-		// Recall function on the next frame
-		this.mouseUpThisFrame = false;  // needs to happen at end of frame because of how I've done it, should change later
-		requestAnimationFrame(this.animateCursor.bind(this));
-	}
-
-	// Functions which actually interface with Obsidian directly (and are called by the program)
-	async onload() {
-		await this.loadSettings();
-		this.addSettingTab(new SmoothTypingSettingsTab(this.app, this));
-
-		// Create the cursor element, and apply the custom class cursor to it
-		// Set the default cursor colour based on the theme
-		this.cursorElement = document.body.createSpan({ cls: "custom-cursor", });
-		this.changeCursorColour();  // resets if no arguments given
-
-		// Add custom listeners for clicking and keypresses
-		document.addEventListener('mousedown', () => { this.mouseDown = true; });
-		document.addEventListener('mouseup', () => { this.mouseDown = false; this.mouseUpThisFrame = true;});
-
-		// Initialise variables and schedule our first function call, which will be recalled once per frame.
-		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
-		this.animateCursor();
-	}
-
-	async loadSettings() { this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()); }
-	async saveSettings() { await this.saveData(this.settings); }
 }
