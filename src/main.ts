@@ -30,6 +30,11 @@ export default class SmoothTypingAnimation extends Plugin {
 
 	remainingMoveTime = 0;
 
+
+
+
+
+	
 	changeCursorColour(colour: string | null = null): void {
 		if (colour === null) {
 			const isLightTheme = document.body.classList.contains('theme-dark') ? false : true;
@@ -156,23 +161,17 @@ export default class SmoothTypingAnimation extends Plugin {
 	private removeIcon() { this.cursorElement.style.display = 'none'; }
 	private bringIconBack() { this.cursorElement.style.display = 'block'; }
 
-	// Main function, called every frame
+	// General function that's called every frame
 	updateCursor() {
-		// Function that will be called on return
-		const scheduleNextUpdate = () => {
-			this.mouseUpThisFrame = false;
-			requestAnimationFrame(this.updateCursor.bind(this));
-		}
-
 		// Handle things which need updating on each frame
 		// Keep track of time on each frame, and how much has elapsed
 		this.timeSinceLastFrame = this.getTimeSinceLastFrame();
 		const { selection, editor } = this.returnReferences();
 
-		// Get the state of the icon. Also assigns
+		// If cursor is not in a legal state, remove the cursor icon and exit
 		if (!selection || !editor || !this.checkCursorExists(selection, editor)) {
 			this.removeIcon();
-			return scheduleNextUpdate();
+			return;
 		}
 
 		// If cursor icon should exist, we render it and update the coordinates for the frame
@@ -195,10 +194,19 @@ export default class SmoothTypingAnimation extends Plugin {
 		this.prevCursorCoords = this.currCursorCoords;
 		this.prevIconCoords = this.currIconCoords;
 
-		// Schedule next update
-		return scheduleNextUpdate();
+		return
 	}
 
+	// Parent function which runs every frame. Divorced from main architecture so that errors don't stop the cursor from rendering forever.
+	// Everything sould be safely within try/catch statements so that this function will always be called every frame
+	animateCursor() {
+		try { this.updateCursor(); }
+		catch (error) { console.error("Error in animateCursor:", error); }
+
+		// Recall function on the next frame
+		this.mouseUpThisFrame = false;  // needs to happen at end of frame because of how I've done it, should change later
+		requestAnimationFrame(this.animateCursor.bind(this));
+	}
 
 	// Functions which actually interface with Obsidian directly (and are called by the program)
 	async onload() {
@@ -216,7 +224,7 @@ export default class SmoothTypingAnimation extends Plugin {
 
 		// Initialise variables and schedule our first function call, which will be recalled once per frame.
 		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
-		this.updateCursor();
+		this.animateCursor();
 	}
 
 	async loadSettings() { this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()); }
