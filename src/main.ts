@@ -199,6 +199,8 @@ export default class SmoothTypingAnimation extends Plugin {
 		return scheduleNextUpdate();
 	}
 
+
+	// Functions which actually interface with Obsidian directly (and are called by the program)
 	async onload() {
 		await this.loadSettings();
 		this.addSettingTab(new SmoothTypingSettingsTab(this.app, this));
@@ -217,11 +219,6 @@ export default class SmoothTypingAnimation extends Plugin {
 		this.updateCursor();
 	}
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
-	
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
+	async loadSettings() { this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()); }
+	async saveSettings() { await this.saveData(this.settings); }
 }
