@@ -1,6 +1,7 @@
 import { Plugin, MarkdownView, Editor } from 'obsidian';
 import { SmoothTypingSettings, SmoothTypingSettingsTab, DEFAULT_SETTINGS} from './settings';
-import { cursorViewPlugin } from './viewPlugin';
+import { EditorView, ViewUpdate } from '@codemirror/view';
+// import { cursorViewPlugin } from './viewPlugin';
 
 type Coordinates = { left: number; top: number};
 type Position = { line: number; ch: number };
@@ -128,7 +129,6 @@ function isInputElement(element: Element | null | undefined): boolean {
     const tagName = element.tagName.toUpperCase(); // Ensure comparison is case-insensitive
     return tagName === 'INPUT' || tagName === 'TEXTAREA';
 }
-
   
 export default class SmoothTypingAnimation extends Plugin {
 	settings: SmoothTypingSettings;
@@ -153,10 +153,9 @@ export default class SmoothTypingAnimation extends Plugin {
 	blinkStartTime: number = Date.now();
 
 	remainingMoveTime = 0;
-
-	selectionChangeHandler: () => void;
 	tPrevSelectionChange: number = Date.now();
 	tIgnoreSelectionChange = 5; // time in ms to ignore consecutive calls to listener
+	private currentlyFocusedCmView: EditorView | null = null;
 
 
 	/* FUNCTIONS WHICH ARE CALLED BY OBSIDIAN DIRECTLY */
@@ -164,31 +163,47 @@ export default class SmoothTypingAnimation extends Plugin {
 		// Load settings
 		await this.loadSettings();
 
+		this.keepFocusedCmViewUpdated();
+
         // Add the listener to the document
-        document.addEventListener('selectionchange', this.selectionChangeHandler);
+        document.addEventListener('selectionchange', this.processSelectionUpdate);
 	}
 
+	keepFocusedCmViewUpdated() {
+		// 1. Create your CodeMirror Extension
+        const cmUpdateListener = EditorView.updateListener.of((update: ViewUpdate) => {
+            if (update.view.hasFocus ) {
+				if (this.currentlyFocusedCmView !== update.view) { this.currentlyFocusedCmView = update.view; }
+			}
+			else {
+                if (this.currentlyFocusedCmView === update.view) { this.currentlyFocusedCmView = null; }
+            }
+        });
+
+        // 2. Register the Extension with Obsidian
+        // This line makes Obsidian apply 'cmUpdateListener' to all current / future CodeMirror instances.
+        this.registerEditorExtension(cmUpdateListener);
+	}
+
+	// Listener which is executed on selection change
 	processSelectionUpdate = () => {
-		// Update the listener if legal
+		// Cancel the listener if too many calls happened too quickly
 		if (Date.now() - this.tPrevSelectionChange < this.tIgnoreSelectionChange) return;
 		this.tPrevSelectionChange = Date.now();
-	
-		const selection = document.getSelection(); // Get the global selection object
-		const range = selection?.getRangeAt(0);
+		
 		const element = document.activeElement;
-		
-		const rect = range?.getBoundingClientRect();
-		const elementRect = element?.getBoundingClientRect();
-		
-		// if (elementVals) { console.log(elementVals); }
-		// TODO: check explicitly if it's a range.
+		// if (element?.closest('.cm-editor')) { console.log('Currently within CM instance!')}
+		// else { console.log('Not currently within CM instance.'); }
 		
 		const isInputField = isInputElement(element);
-		if (isInputField) { console.log('In input field.');  return; }
+		if (isInputField) { console.log('Currently within input field.');  return; }
 		const elementVals = element ? getAdjustedElementBoundsForCaret(element) : null;
 		const rangeVals = getRangeBasedCaretPosition();
-		if (rangeVals) { console.log('Range-based at', rangeVals); }
-		else if (elementVals) { console.log('Element-based at', elementVals); }
+
+		if (false) {
+			if (rangeVals) { console.log('Range-based at', rangeVals); }
+			else if (elementVals) { console.log('Element-based at', elementVals); }
+		}
 	};
 
 	// Initial functions
