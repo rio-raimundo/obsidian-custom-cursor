@@ -1,9 +1,134 @@
 import { Plugin, MarkdownView, Editor } from 'obsidian';
 import { SmoothTypingSettings, SmoothTypingSettingsTab, DEFAULT_SETTINGS} from './settings';
+import { cursorViewPlugin } from './viewPlugin';
 
 type Coordinates = { left: number; top: number};
 type Position = { line: number; ch: number };
 interface ExtendedEditor extends Editor { containerEl: HTMLElement; }
+
+interface CaretCoords {
+	x: number;
+	y: number;
+	height: number;
+}
+
+/**
+ * Calculates the approximate starting coordinates and height for a caret
+ * within an element, accounting for padding and border.
+ * This is intended as a fallback when range.getBoundingClientRect() fails
+ * (often when the caret is at offset 0).
+ *
+ * @param {Element | null | undefined } element The DOM element (usually document.activeElement).
+ * @returns {{x: number, y: number, height: number} | null} An object with x, y, height,
+ *          or null if calculation fails (e.g., element not found, styles inaccessible).
+ */
+function getAdjustedElementBoundsForCaret( element: Element | null | undefined ): CaretCoords | null {
+	if (!element) { return null; }
+
+	// 1. Get the element's overall bounding box (border box)
+	const elementRect: DOMRect = element.getBoundingClientRect();
+
+	// 2. Get the computed styles to find padding, border, and line-height
+    let computedStyle: CSSStyleDeclaration;
+    try {
+        computedStyle = window.getComputedStyle(element);
+		// This case is highly unlikely as getComputedStyle returns an object even for detached nodes
+         if (!computedStyle) {
+             console.error("getAdjustedElementBoundsForCaret: Could not get computed style for element:", element);
+             return null;
+        }
+    } catch (e) {
+         console.error("getAdjustedElementBoundsForCaret: Error getting computed style:", e);
+        return null;
+    }
+
+	// 3. Handle lineHeight, including edge cases and exceptions
+	// It should never be NaN as obsidian seems to be very good at providing it, but if it is then we assume a standard of fontsize * 1.5 (true in most cases, though not in tables for some reason).
+	// We also make sure height is not greater than element height (can happen with weird line-heights/box-sizing)
+    let lineHeight: number = parseFloat(computedStyle.lineHeight);
+
+    if (isNaN(lineHeight) || lineHeight <= 0) {
+        console.warn("getAdjustedElementBoundsForCaret: Using approximate lineHeight based on fontSize for element:", element);
+		const multiplier = 1.5;
+        lineHeight = (parseFloat(computedStyle.fontSize) || 16) * multiplier; // Use 16 as fallback
+    }
+    if (elementRect.height > 0) { lineHeight = Math.min(lineHeight, elementRect.height); }
+
+	// 4. Extract and parse the other relevant style values (default to 0 if parsing fails)
+	const paddingLeft: number = parseFloat(computedStyle.paddingLeft) || 0;
+	const paddingTop: number = parseFloat(computedStyle.paddingTop) || 0;
+	const borderLeft: number = parseFloat(computedStyle.borderLeftWidth) || 0;
+	const borderTop: number = parseFloat(computedStyle.borderTopWidth) || 0;
+
+    // 5. Calculate adjusted coordinates, accounting for padding
+    const x: number = elementRect.left + borderLeft + paddingLeft;
+    const y: number = elementRect.top + borderTop + paddingTop;
+    const height: number = lineHeight;
+    return { x, y, height };
+}
+
+/**
+ * Attempts to get the caret position using the selection range's bounding box.
+ * This is intended for use *outside* of CodeMirror editors, when the
+ * range is expected to provide a valid bounding client rectangle for the caret.
+ *
+ * @returns {{x: number, y: number, height: number} | null} An object with x, y, height
+ *          representing the caret position and line height, or null if the selection
+ *          is invalid, not collapsed, or getBoundingClientRect fails or returns
+ *          an invalid rectangle (e.g., zero height).
+ */
+function getRangeBasedCaretPosition(): CaretCoords | null {
+    const selection = document.getSelection();
+
+    // 1. Validate selection state
+	// Return if no selection, no ranges, or the selection is not a caret
+    if (!selection || selection.rangeCount === 0 || selection.type != "Caret") { console.log("getRangeBasedCaretPosition: No valid selection"); return null; }
+
+	// 2. Get the selection range and bounding box
+    let range: Range;
+    try { range = selection.getRangeAt(0); } catch (e) {
+		console.error("getRangeBasedCaretPosition: Error getting selection range:", e);
+        return null;
+    }
+	
+	let rect: DOMRect;
+    try { rect = range.getBoundingClientRect(); } catch (e) {
+        console.error("getRangeBasedCaretPosition: Error getting range bounding client rect:", e);
+        return null;
+    }
+
+    // 3. Validate the bounding box
+    // A valid caret bounding box should theoretically have zero width (though browsers might vary slightly)
+    // but MUST have a positive height representing the line height.
+    // Check for positive height as the primary indicator of validity.
+    // Also check against all-zero rect which sometimes indicates failure.
+    if (rect.height <= 0 ||
+        (rect.top === 0 && rect.left === 0 && rect.right === 0 && rect.bottom === 0 && rect.width === 0 && rect.height === 0)
+    ) {
+        return null;
+    }
+
+    // 5. Extract coordinates and height
+    // For LTR text, 'left' is the relevant horizontal position.
+    const x: number = rect.left;
+    const y: number = rect.top;
+    const height: number = rect.height;
+
+    return { x, y, height };
+}
+
+/**
+ * Checks if the given DOM element is an input field (<input> or <textarea>).
+ *
+ * @param {Element | null | undefined} element The element to check.
+ * @returns {boolean} True if the element is an <input> or <textarea>, false otherwise.
+ */
+function isInputElement(element: Element | null | undefined): boolean {
+    if (!element) { return false; }
+    const tagName = element.tagName.toUpperCase(); // Ensure comparison is case-insensitive
+    return tagName === 'INPUT' || tagName === 'TEXTAREA';
+}
+
   
 export default class SmoothTypingAnimation extends Plugin {
 	settings: SmoothTypingSettings;
@@ -28,7 +153,10 @@ export default class SmoothTypingAnimation extends Plugin {
 	blinkStartTime: number = Date.now();
 
 	remainingMoveTime = 0;
-	
+
+	selectionChangeHandler: () => void;
+	tPrevSelectionChange: number = Date.now();
+	tIgnoreSelectionChange = 5; // time in ms to ignore consecutive calls to listener
 
 
 	/* FUNCTIONS WHICH ARE CALLED BY OBSIDIAN DIRECTLY */
@@ -36,17 +164,32 @@ export default class SmoothTypingAnimation extends Plugin {
 		// Load settings
 		await this.loadSettings();
 
-		// Create the cursor element, and apply the custom class cursor to it
-		this.initialiseCursor();
-
-		// Add custom listeners for clicking and keypresses
-		document.addEventListener('mousedown', () => { this.mouseDown = true; });
-		document.addEventListener('mouseup', () => { this.mouseDown = false; this.mouseUpThisFrame = true;});
-
-		// Initialise variables and schedule our first function call, which will be recalled once per frame.
-		requestAnimationFrame(() => { this.blinkStartTime = Date.now(); });
-		this.animateCursor();  // call parent function which will be called once per frame
+        // Add the listener to the document
+        document.addEventListener('selectionchange', this.selectionChangeHandler);
 	}
+
+	processSelectionUpdate = () => {
+		// Update the listener if legal
+		if (Date.now() - this.tPrevSelectionChange < this.tIgnoreSelectionChange) return;
+		this.tPrevSelectionChange = Date.now();
+	
+		const selection = document.getSelection(); // Get the global selection object
+		const range = selection?.getRangeAt(0);
+		const element = document.activeElement;
+		
+		const rect = range?.getBoundingClientRect();
+		const elementRect = element?.getBoundingClientRect();
+		
+		// if (elementVals) { console.log(elementVals); }
+		// TODO: check explicitly if it's a range.
+		
+		const isInputField = isInputElement(element);
+		if (isInputField) { console.log('In input field.');  return; }
+		const elementVals = element ? getAdjustedElementBoundsForCaret(element) : null;
+		const rangeVals = getRangeBasedCaretPosition();
+		if (rangeVals) { console.log('Range-based at', rangeVals); }
+		else if (elementVals) { console.log('Element-based at', elementVals); }
+	};
 
 	// Initial functions
 	initialiseCursor() {
