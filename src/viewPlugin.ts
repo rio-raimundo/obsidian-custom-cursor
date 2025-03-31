@@ -9,36 +9,46 @@ import {
   ViewUpdate,
 } from '@codemirror/view';
 
-class viewPlugin implements PluginValue {
-  view: EditorView;
-  decorations: DecorationSet;
-
-  constructor(view: EditorView) {
-    this.view = view;
-    this.decorations = this.buildDecorations(view);
-  }
-
-  docViewUpdate(view: EditorView): void {
-  }
-
-  update(update: ViewUpdate): void {
-    console.log(update.selectionSet);
-	}
-
-  destroy() {}
-
-	private buildDecorations(view: EditorView): DecorationSet {
-		const builder = new RangeSetBuilder<Decoration>();
-		return builder.finish();
-	}
+interface CursorCoords {
+  x: number;
+  y: number;
+  height: number;
 }
 
-const pluginSpec: PluginSpec<viewPlugin> = {
-  decorations: (value: viewPlugin) => value.decorations,
-};
+// Define the function type for your separate rendering logic
+type CursorRenderer = (coords: CursorCoords[] | null) => void;
+
+// 1. Define your ViewPlugin class
+class CursorTrackerPlugin implements PluginValue {
+  private view: EditorView;
+
+  constructor(view: EditorView,) {
+      this.view = view;
+      console.log("CursorTrackerPlugin created for view:", view.dom);
+
+      // Initial calculation on creation if needed (e.g., if view already has selection)
+      // this.calcWhatever()
+  }
+
+  update(update: ViewUpdate) {
+    if (!update.view.hasFocus) { return; }
+    console.log(update.selectionSet);
+
+      // Only recalculate if selection or document changed, or geometry changed
+      if (update.selectionSet || update.docChanged || update.geometryChanged) {
+           // Optional: Check if the view has focus before rendering,
+           // if your renderer should only show for the focused view.
+           // This check depends on whether the *renderer* cares about focus,
+           // the *plugin itself* gets updates regardless.
+          // if (this.view.hasFocus) {
+
+          // } else {
+               // Optional: If view loses focus but plugin still updates, tell renderer to clear?
+               // this.renderer(null); // Depends on desired behavior
+          // }
+      }
+  }
+}
 
 // Define an instance of the plugin to export
-export const cursorViewPlugin = ViewPlugin.fromClass(
-  viewPlugin,
-  pluginSpec
-);
+export const cursorViewPlugin = ViewPlugin.fromClass(CursorTrackerPlugin);

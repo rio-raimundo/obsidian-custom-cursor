@@ -1,134 +1,21 @@
 import { Plugin, MarkdownView, Editor } from 'obsidian';
 import { SmoothTypingSettings, SmoothTypingSettingsTab, DEFAULT_SETTINGS} from './settings';
 import { EditorView, ViewUpdate } from '@codemirror/view';
-// import { cursorViewPlugin } from './viewPlugin';
+import { SelectionRange, Transaction } from "@codemirror/state";
 
 type Coordinates = { left: number; top: number};
 type Position = { line: number; ch: number };
 interface ExtendedEditor extends Editor { containerEl: HTMLElement; }
 
-interface CaretCoords {
+interface CaretInfo {
+	head: number;
+	anchor: number;
 	x: number;
 	y: number;
 	height: number;
 }
 
-/**
- * Calculates the approximate starting coordinates and height for a caret
- * within an element, accounting for padding and border.
- * This is intended as a fallback when range.getBoundingClientRect() fails
- * (often when the caret is at offset 0).
- *
- * @param {Element | null | undefined } element The DOM element (usually document.activeElement).
- * @returns {{x: number, y: number, height: number} | null} An object with x, y, height,
- *          or null if calculation fails (e.g., element not found, styles inaccessible).
- */
-function getAdjustedElementBoundsForCaret( element: Element | null | undefined ): CaretCoords | null {
-	if (!element) { return null; }
 
-	// 1. Get the element's overall bounding box (border box)
-	const elementRect: DOMRect = element.getBoundingClientRect();
-
-	// 2. Get the computed styles to find padding, border, and line-height
-    let computedStyle: CSSStyleDeclaration;
-    try {
-        computedStyle = window.getComputedStyle(element);
-		// This case is highly unlikely as getComputedStyle returns an object even for detached nodes
-         if (!computedStyle) {
-             console.error("getAdjustedElementBoundsForCaret: Could not get computed style for element:", element);
-             return null;
-        }
-    } catch (e) {
-         console.error("getAdjustedElementBoundsForCaret: Error getting computed style:", e);
-        return null;
-    }
-
-	// 3. Handle lineHeight, including edge cases and exceptions
-	// It should never be NaN as obsidian seems to be very good at providing it, but if it is then we assume a standard of fontsize * 1.5 (true in most cases, though not in tables for some reason).
-	// We also make sure height is not greater than element height (can happen with weird line-heights/box-sizing)
-    let lineHeight: number = parseFloat(computedStyle.lineHeight);
-
-    if (isNaN(lineHeight) || lineHeight <= 0) {
-        console.warn("getAdjustedElementBoundsForCaret: Using approximate lineHeight based on fontSize for element:", element);
-		const multiplier = 1.5;
-        lineHeight = (parseFloat(computedStyle.fontSize) || 16) * multiplier; // Use 16 as fallback
-    }
-    if (elementRect.height > 0) { lineHeight = Math.min(lineHeight, elementRect.height); }
-
-	// 4. Extract and parse the other relevant style values (default to 0 if parsing fails)
-	const paddingLeft: number = parseFloat(computedStyle.paddingLeft) || 0;
-	const paddingTop: number = parseFloat(computedStyle.paddingTop) || 0;
-	const borderLeft: number = parseFloat(computedStyle.borderLeftWidth) || 0;
-	const borderTop: number = parseFloat(computedStyle.borderTopWidth) || 0;
-
-    // 5. Calculate adjusted coordinates, accounting for padding
-    const x: number = elementRect.left + borderLeft + paddingLeft;
-    const y: number = elementRect.top + borderTop + paddingTop;
-    const height: number = lineHeight;
-    return { x, y, height };
-}
-
-/**
- * Attempts to get the caret position using the selection range's bounding box.
- * This is intended for use *outside* of CodeMirror editors, when the
- * range is expected to provide a valid bounding client rectangle for the caret.
- *
- * @returns {{x: number, y: number, height: number} | null} An object with x, y, height
- *          representing the caret position and line height, or null if the selection
- *          is invalid, not collapsed, or getBoundingClientRect fails or returns
- *          an invalid rectangle (e.g., zero height).
- */
-function getRangeBasedCaretPosition(): CaretCoords | null {
-    const selection = document.getSelection();
-
-    // 1. Validate selection state
-	// Return if no selection, no ranges, or the selection is not a caret
-    if (!selection || selection.rangeCount === 0 || selection.type != "Caret") { console.log("getRangeBasedCaretPosition: No valid selection"); return null; }
-
-	// 2. Get the selection range and bounding box
-    let range: Range;
-    try { range = selection.getRangeAt(0); } catch (e) {
-		console.error("getRangeBasedCaretPosition: Error getting selection range:", e);
-        return null;
-    }
-	
-	let rect: DOMRect;
-    try { rect = range.getBoundingClientRect(); } catch (e) {
-        console.error("getRangeBasedCaretPosition: Error getting range bounding client rect:", e);
-        return null;
-    }
-
-    // 3. Validate the bounding box
-    // A valid caret bounding box should theoretically have zero width (though browsers might vary slightly)
-    // but MUST have a positive height representing the line height.
-    // Check for positive height as the primary indicator of validity.
-    // Also check against all-zero rect which sometimes indicates failure.
-    if (rect.height <= 0 ||
-        (rect.top === 0 && rect.left === 0 && rect.right === 0 && rect.bottom === 0 && rect.width === 0 && rect.height === 0)
-    ) {
-        return null;
-    }
-
-    // 5. Extract coordinates and height
-    // For LTR text, 'left' is the relevant horizontal position.
-    const x: number = rect.left;
-    const y: number = rect.top;
-    const height: number = rect.height;
-
-    return { x, y, height };
-}
-
-/**
- * Checks if the given DOM element is an input field (<input> or <textarea>).
- *
- * @param {Element | null | undefined} element The element to check.
- * @returns {boolean} True if the element is an <input> or <textarea>, false otherwise.
- */
-function isInputElement(element: Element | null | undefined): boolean {
-    if (!element) { return false; }
-    const tagName = element.tagName.toUpperCase(); // Ensure comparison is case-insensitive
-    return tagName === 'INPUT' || tagName === 'TEXTAREA';
-}
   
 export default class SmoothTypingAnimation extends Plugin {
 	settings: SmoothTypingSettings;
@@ -155,7 +42,73 @@ export default class SmoothTypingAnimation extends Plugin {
 	remainingMoveTime = 0;
 	tPrevSelectionChange: number = Date.now();
 	tIgnoreSelectionChange = 5; // time in ms to ignore consecutive calls to listener
-	private currentlyFocusedCmView: EditorView | null = null;
+
+
+	caretInfos: CaretInfo[] = [];
+
+	/* 
+	- Function wants to check if the two things are different
+	- If the length changes, we want to update but NOT trigger the animation
+	- Otherwise we just compare each item
+	- Returns array where first value tells you if the arrays have changed and the second tells you if you should trigger the animation
+	*/
+	caretInfosChanged(prevCaretInfo: CaretInfo[], currCaretInfo: CaretInfo[]) {
+		if (prevCaretInfo.length !== currCaretInfo.length) { return [true, false]; }
+		for (let i = 0; i < prevCaretInfo.length; i++) {
+			if (prevCaretInfo[i].head !== currCaretInfo[i].head) { return [true, true]; }
+		}
+		return [false, false];
+	}
+
+	wasTriggeredByPointer = (transactions: readonly Transaction[]) => {
+		let wasTriggeredByPointer = false;
+
+		for (const tr of transactions) {
+			const userEvent = tr.annotation(Transaction.userEvent);
+			console.log(userEvent);
+			if (userEvent === "select.pointer") {
+				wasTriggeredByPointer = true;
+				break;
+			}
+		}
+		return wasTriggeredByPointer;
+	}
+
+	updateView(update: ViewUpdate) {
+		const view = update.view;
+		if (!view.hasFocus || !update.selectionSet) { return; }
+
+		const caretInfos = this.coordsFromRanges(view, view.state.selection.ranges);
+		const [hasChanged, shouldAnimate] = this.caretInfosChanged(this.caretInfos, caretInfos);
+		this.wasTriggeredByPointer(update.transactions);
+		if (hasChanged) {
+			if (this.caretInfos.length > 0) {
+				const caretInfo = caretInfos[0];
+				// if (caretInfo.head === caretInfo.anchor) {
+				// 	console.log(`Moved from ${this.caretInfos[0].head} to ${caretInfo.head}`);
+				// } else {
+				// 	console.log(`Moved from (${this.caretInfos[0].anchor}, ${this.caretInfos[0].head}) to (${caretInfo.anchor}, ${caretInfo.head})`); 
+				// }
+			}
+			this.caretInfos = caretInfos; 
+		}
+	}
+
+	coordsFromRanges(view: EditorView, ranges: readonly SelectionRange[]) {
+		const allCaretCoords: CaretInfo[] = [];
+		ranges.forEach((range, _) => {
+			const caretPosition = range.head; // The offset position of this caret
+			const coords = view.coordsAtPos(caretPosition); // Get coordinates for this specific caret position
+			if (!coords) { return; }
+
+			// coords contains { left, right, top, bottom } relative to the document
+			const caretX = coords.left;
+			const caretY = coords.top;
+			const caretHeight = coords.bottom - coords.top;
+			allCaretCoords.push({head: caretPosition, anchor: range.anchor, x: caretX, y: caretY, height: caretHeight});
+		});
+		return allCaretCoords;
+	}
 
 
 	/* FUNCTIONS WHICH ARE CALLED BY OBSIDIAN DIRECTLY */
@@ -163,48 +116,34 @@ export default class SmoothTypingAnimation extends Plugin {
 		// Load settings
 		await this.loadSettings();
 
-		this.keepFocusedCmViewUpdated();
+		this.registerEditorExtension(EditorView.updateListener.of((update) => { this.updateView(update); }));
+
+		// this.keepFocusedCmViewUpdated();
 
         // Add the listener to the document
-        document.addEventListener('selectionchange', this.processSelectionUpdate);
+        // document.addEventListener('selectionchange', this.processSelectionUpdate);
+
+		// check whether to show / hide the cursor
+		// document.addEventListener('focusin', this.handleFocusChange);
+		// document.addEventListener("focusin", this.handleFocusChange);
 	}
 
-	keepFocusedCmViewUpdated() {
-		// 1. Create your CodeMirror Extension
-        const cmUpdateListener = EditorView.updateListener.of((update: ViewUpdate) => {
-            if (update.view.hasFocus ) {
-				if (this.currentlyFocusedCmView !== update.view) { this.currentlyFocusedCmView = update.view; }
-			}
-			else {
-                if (this.currentlyFocusedCmView === update.view) { this.currentlyFocusedCmView = null; }
-            }
-        });
+	
+	// keepFocusedCmViewUpdated() {
+	// 	// 1. Create your CodeMirror Extension
+    //     const cmUpdateListener = EditorView.updateListener.of((update: ViewUpdate) => {
+    //         if (update.view.hasFocus ) {
+	// 			if (this.currentlyFocusedCmView !== update.view) { this.currentlyFocusedCmView = update.view; }
+	// 		}
+	// 		else {
+    //             if (this.currentlyFocusedCmView === update.view) { this.currentlyFocusedCmView = null; }
+    //         }
+    //     });
 
-        // 2. Register the Extension with Obsidian
-        // This line makes Obsidian apply 'cmUpdateListener' to all current / future CodeMirror instances.
-        this.registerEditorExtension(cmUpdateListener);
-	}
-
-	// Listener which is executed on selection change
-	processSelectionUpdate = () => {
-		// Cancel the listener if too many calls happened too quickly
-		if (Date.now() - this.tPrevSelectionChange < this.tIgnoreSelectionChange) return;
-		this.tPrevSelectionChange = Date.now();
-		
-		const element = document.activeElement;
-		// if (element?.closest('.cm-editor')) { console.log('Currently within CM instance!')}
-		// else { console.log('Not currently within CM instance.'); }
-		
-		const isInputField = isInputElement(element);
-		if (isInputField) { console.log('Currently within input field.');  return; }
-		const elementVals = element ? getAdjustedElementBoundsForCaret(element) : null;
-		const rangeVals = getRangeBasedCaretPosition();
-
-		if (false) {
-			if (rangeVals) { console.log('Range-based at', rangeVals); }
-			else if (elementVals) { console.log('Element-based at', elementVals); }
-		}
-	};
+    //     // 2. Register the Extension with Obsidian
+    //     // This line makes Obsidian apply 'cmUpdateListener' to all current / future CodeMirror instances.
+    //     this.registerEditorExtension(cmUpdateListener);
+	// }
 
 	// Initial functions
 	initialiseCursor() {
