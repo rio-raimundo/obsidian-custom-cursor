@@ -24,10 +24,10 @@ export class CursorTracker implements PluginValue {
     this.plugin = plugin;
 
     // Set initial cursor coordinates once window loads in
-    view.requestMeasure({ read: () => {
+    view.requestMeasure({ read: () => { requestAnimationFrame(() => {
       this.selectionData = this.selectionFromRanges(view, view.state.selection.ranges);
       this.signalCursorUpdate(false);
-    } });
+    }); } });
   }
 
   update(update: ViewUpdate) {
@@ -55,14 +55,18 @@ export class CursorTracker implements PluginValue {
 
   // Functions to inform the main plugin of a change, so it can handle it
   signalCursorUpdate(shouldAnimate: boolean) { this.plugin.updateIconLocation(this.selectionData, shouldAnimate); }
-  signalFocusChange(isGained: boolean) { this.plugin.isAnyFocused = isGained; }
+  signalFocusChange(isGained: boolean) { this.plugin.updateFocus(isGained); }
 
   haveCaretsMoved(prevCaretInfo: SelectionData[], currCaretInfo: SelectionData[]) {
-    if (prevCaretInfo.length !== currCaretInfo.length) { return true; }
+    // Handle undefined cases
+    if (!prevCaretInfo && !currCaretInfo) { return false; }
+    if (!prevCaretInfo || !currCaretInfo) { return true; }
 
+    if (prevCaretInfo.length !== currCaretInfo.length) { return true; }
     for (let i = 0; i < prevCaretInfo.length; i++) {
         if (prevCaretInfo[i].head !== currCaretInfo[i].head) { return true; }
     }
+
     return false;
   }
 

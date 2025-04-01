@@ -1,7 +1,6 @@
 import { Plugin, MarkdownView, Editor } from 'obsidian';
 import { SmoothTypingSettings, SmoothTypingSettingsTab, DEFAULT_SETTINGS} from './settings';
 import { EditorView, ViewPlugin } from '@codemirror/view';
-import { SelectionRange } from "@codemirror/state";
 import { CursorTracker, SelectionData } from './viewPlugin';
 
 type Coordinates = { left: number; top: number};
@@ -54,27 +53,12 @@ export default class SmoothTypingAnimation extends Plugin {
         }
     }
 
-    coordsFromRanges(view: EditorView, ranges: readonly SelectionRange[]) {
-        const allCaretCoords: CaretInfo[] = [];
-        ranges.forEach((range, _) => {
-            const caretPosition = range.head; // The offset position of this caret
-            const coords = view.coordsAtPos(caretPosition); // Get coordinates for this specific caret position
-            if (!coords) { return; }
-
-            // coords contains { left, right, top, bottom } relative to the document
-            const caretX = coords.left;
-            const caretY = coords.top;
-            const caretHeight = coords.bottom - coords.top;
-            allCaretCoords.push({head: caretPosition, anchor: range.anchor, x: caretX, y: caretY, height: caretHeight});
-        });
-        return allCaretCoords;
-    }
-
 
     /* FUNCTIONS WHICH ARE CALLED BY OBSIDIAN DIRECTLY */
     async onload() {
         // Load settings
         await this.loadSettings();
+		this.cursorElement = document.body.createSpan({ cls: "custom-cursor", });
 		
 		// Add your listener for right clicks on this frame, to get around the fact that CM annotates them incorrectly
 		document.addEventListener('mousedown', this.logRightClick.bind(this));
@@ -84,14 +68,44 @@ export default class SmoothTypingAnimation extends Plugin {
         this.registerEditorExtension(cursorTrackerInstance);
     }
 
-	// Main function to update the location of the cursor
-	updateIconLocation(selectionData: SelectionData[], shouldAnimate: boolean) {
+	updateFocus(isGained: boolean) {
+		this.isAnyFocused = isGained;
+		if (!isGained) { this.handleFocusLoss(); } // need to call this so we remove the icon if nothing has gained focus
+	}
 
+	handleFocusLoss() {
+		if (this.isAnyFocused) { return; }
+		this.cursorElement.style.display = "none";
+	}
+
+	// Main function to update the location of the cursor
+	updateIconLocation(selectionData: SelectionData[], shouldAnimate = false) {
+		/*
+			- Put this all inside a request animationframe call, so that the logic works.
+			- We can now use hasFocus to tell us if the focus is within any codemirror instance.
+			- If it's NOT, then we just render the cursor as usual! Probably by setting the opacity to 100, and not rendering our own? Have a function for this I guess?
+			- If it is, then we call our animation logic.
+		*/
+		if (!selectionData || selectionData.length <= 0) { return; }
+		console.log(`called with data: ${JSON.stringify(selectionData)}`);
+		
+		const data = selectionData[0];
+		requestAnimationFrame(() => {
+			if (!this.isAnyFocused) { return; }
+			const style = this.cursorElement.style;
+			if (data) {
+				style.display = "block";
+				style.setProperty("--cursor-x1", `${data.x}px`);
+				style.setProperty("--cursor-y1", `${data.y}px`);
+				style.setProperty("--cursor-height", `${data.height}px`);
+				style.setProperty("--cursor-width", `5px`);
+			}
+		});
 	}
 
     // Initial functions
     initialiseCursor() {
-        this.cursorElement = document.body.createSpan({ cls: "custom-cursor", });
+        
         this.setCursorColour();  // resets if no arguments given
     }
     async loadSettings() {

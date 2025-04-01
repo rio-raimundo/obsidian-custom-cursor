@@ -18,9 +18,10 @@
 	pointer-events: none;
 }
 
-/* .cm-editor * {
+.cm-editor * {
 	caret-color: transparent;
-} */
+}
+
 /* Doesn't display when selecting text */
 body:not(:has(.cm-cursor-secondary)) .cm-editor .cm-cursor {
 	display: none !important;
