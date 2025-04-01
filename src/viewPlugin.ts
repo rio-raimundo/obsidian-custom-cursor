@@ -26,36 +26,36 @@ export class CursorTracker implements PluginValue {
     // Set initial cursor coordinates once window loads in
     view.requestMeasure({ read: () => {
       this.selectionData = this.selectionFromRanges(view, view.state.selection.ranges);
-      this.triggerIconUpdate(false);
+      this.signalCursorUpdate(false);
     } });
   }
 
   update(update: ViewUpdate) {
     const view = update.view;
+    if (update.focusChanged) { this.signalFocusChange(view.hasFocus); }
     if (!view.hasFocus) { return; }
 
     // Everything from here needs to be done within the 'read' portion of the CM cycle, so that we can access data like the cursor coords:
     view.requestMeasure({
       read: () => {
-        const selectionData = this.selectionFromRanges(update.view, view.state.selection.ranges);
+        const selectionData = this.selectionFromRanges(view, view.state.selection.ranges);
         const hasMoved = this.haveCaretsMoved(this.selectionData, selectionData);
 
         if (hasMoved) {
-          console.log("hasMoved");
+          // console.log("hasMoved");
           // const triggeredByTyping = this.wasTriggeredByTyping(update.transactions[0]);
 
           // Update the selection data and trigger the icon update from the main plugin
           this.selectionData = selectionData; 
-          this.triggerIconUpdate(false);
+          this.signalCursorUpdate(false);
         }
       }
     });
   }
 
-  // Lets the main plugin know that the cursor location has changed by calling its own function, with a set of data
-  triggerIconUpdate(shouldAnimate: boolean) {
-    this.plugin.updateIconLocation(this.selectionData, shouldAnimate);
-  }
+  // Functions to inform the main plugin of a change, so it can handle it
+  signalCursorUpdate(shouldAnimate: boolean) { this.plugin.updateIconLocation(this.selectionData, shouldAnimate); }
+  signalFocusChange(isGained: boolean) { this.plugin.isAnyFocused = isGained; }
 
   haveCaretsMoved(prevCaretInfo: SelectionData[], currCaretInfo: SelectionData[]) {
     if (prevCaretInfo.length !== currCaretInfo.length) { return true; }

@@ -45,8 +45,7 @@ export default class SmoothTypingAnimation extends Plugin {
 
     caretInfos: CaretInfo[] = [];
     rightClickThisFrame = false;
-
-
+	isAnyFocused = true;  // Focus is set when page is first loaded
 	
     logRightClick(event: MouseEvent) {
         if (event.button === 2) {
@@ -54,8 +53,6 @@ export default class SmoothTypingAnimation extends Plugin {
             requestAnimationFrame(() => { this.rightClickThisFrame = false });
         }
     }
-
-
 
     coordsFromRanges(view: EditorView, ranges: readonly SelectionRange[]) {
         const allCaretCoords: CaretInfo[] = [];
