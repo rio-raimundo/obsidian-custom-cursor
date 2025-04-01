@@ -1,12 +1,7 @@
-import { RangeSetBuilder } from '@codemirror/state';
 import { SelectionRange, Transaction } from "@codemirror/state";
 import {
-  Decoration,
-  DecorationSet,
   EditorView,
-  PluginSpec,
   PluginValue,
-  ViewPlugin,
   ViewUpdate,
 } from '@codemirror/view';
 import SmoothTypingAnimation from './main';
@@ -19,7 +14,7 @@ interface SelectionData {
   height: number;
 }
 
-export class CursorTrackerPlugin implements PluginValue {
+export class CursorTracker implements PluginValue {
   view: EditorView;
   plugin: SmoothTypingAnimation;
   selectionData: SelectionData[];
@@ -27,26 +22,38 @@ export class CursorTrackerPlugin implements PluginValue {
   constructor(view: EditorView, plugin: SmoothTypingAnimation) {
     this.view = view;
     this.plugin = plugin;
-  }
 
+    // Set initial cursor coordinates once window loads in
+    view.requestMeasure({ read: () => {
+      this.selectionData = this.selectionFromRanges(view, view.state.selection.ranges);
+      this.triggerIconUpdate();
+    } });
+  }
 
   update(update: ViewUpdate) {
     const view = update.view;
     if (!view.hasFocus) { return; }
 
-    // Get selectionData once the update cycle has complete?
-    const selectionData = this.selectionFromRanges(view, view.state.selection.ranges);
+    // Everything from here needs to be done within the 'read' portion of the CM cycle, so that we can access data like the cursor coords:
+    view.requestMeasure({
+      read: () => {
+        const selectionData = this.selectionFromRanges(update.view, view.state.selection.ranges);
+        const hasMoved = this.haveCaretsMoved(this.selectionData, selectionData);
 
-    // Get current caret infos and see if any changes have occured
-    const hasMoved = this.haveCaretsMoved(this.selectionData, selectionData);
+        if (hasMoved) {
+          console.log("hasMoved");
+          const triggeredByTyping = this.wasTriggeredByTyping(update.transactions[0]);
+          // const shouldAnimate = (this.caretInfos.length == caretInfos.length);
+    
+          this.selectionData = selectionData; 
+        }
+      }
+    });
+  }
 
-    if (hasMoved) {
-      console.log("hasMoved");
-      const triggeredByTyping = this.wasTriggeredByTyping(update.transactions[0]);
-      // const shouldAnimate = (this.caretInfos.length == caretInfos.length);
-
-      this.selectionData = selectionData; 
-    }
+  // Lets the main plugin know that the cursor location has changed by calling its own function, with a set of data
+  triggerIconUpdate() {
+    
   }
 
   haveCaretsMoved(prevCaretInfo: SelectionData[], currCaretInfo: SelectionData[]) {

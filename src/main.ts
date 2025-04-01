@@ -2,7 +2,7 @@ import { Plugin, MarkdownView, Editor } from 'obsidian';
 import { SmoothTypingSettings, SmoothTypingSettingsTab, DEFAULT_SETTINGS} from './settings';
 import { EditorView, ViewPlugin } from '@codemirror/view';
 import { SelectionRange, Transaction } from "@codemirror/state";
-import { CursorTrackerPlugin } from './viewPlugin';
+import { CursorTracker } from './viewPlugin';
 
 type Coordinates = { left: number; top: number};
 type Position = { line: number; ch: number };
@@ -83,9 +83,14 @@ export default class SmoothTypingAnimation extends Plugin {
 		document.addEventListener('mousedown', this.logRightClick.bind(this));
 
 		// Register the cursor tracker, which will keep track of the location of the cursors
-		const cursorTrackerInstance = ViewPlugin.define((view: EditorView) => { return new CursorTrackerPlugin(view, this); });
+		const cursorTrackerInstance = ViewPlugin.define((view: EditorView) => { return new CursorTracker(view, this); });
         this.registerEditorExtension(cursorTrackerInstance);
     }
+
+	// Main function to update the location of the cursor
+	updateCursor() {
+
+	}
 
     // Initial functions
     initialiseCursor() {
