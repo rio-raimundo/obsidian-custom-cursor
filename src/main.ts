@@ -1,8 +1,8 @@
 import { Plugin, MarkdownView, Editor } from 'obsidian';
 import { SmoothTypingSettings, SmoothTypingSettingsTab, DEFAULT_SETTINGS} from './settings';
 import { EditorView, ViewPlugin } from '@codemirror/view';
-import { SelectionRange, Transaction } from "@codemirror/state";
-import { CursorTracker } from './viewPlugin';
+import { SelectionRange } from "@codemirror/state";
+import { CursorTracker, SelectionData } from './viewPlugin';
 
 type Coordinates = { left: number; top: number};
 type Position = { line: number; ch: number };
@@ -88,7 +88,7 @@ export default class SmoothTypingAnimation extends Plugin {
     }
 
 	// Main function to update the location of the cursor
-	updateCursor() {
+	updateIconLocation(selectionData: SelectionData[], shouldAnimate: boolean) {
 
 	}
 

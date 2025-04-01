@@ -6,7 +6,7 @@ import {
 } from '@codemirror/view';
 import SmoothTypingAnimation from './main';
 
-interface SelectionData {
+export interface SelectionData {
   head: number;
   anchor: number;
   x: number;
@@ -26,7 +26,7 @@ export class CursorTracker implements PluginValue {
     // Set initial cursor coordinates once window loads in
     view.requestMeasure({ read: () => {
       this.selectionData = this.selectionFromRanges(view, view.state.selection.ranges);
-      this.triggerIconUpdate();
+      this.triggerIconUpdate(false);
     } });
   }
 
@@ -42,18 +42,19 @@ export class CursorTracker implements PluginValue {
 
         if (hasMoved) {
           console.log("hasMoved");
-          const triggeredByTyping = this.wasTriggeredByTyping(update.transactions[0]);
-          // const shouldAnimate = (this.caretInfos.length == caretInfos.length);
-    
+          // const triggeredByTyping = this.wasTriggeredByTyping(update.transactions[0]);
+
+          // Update the selection data and trigger the icon update from the main plugin
           this.selectionData = selectionData; 
+          this.triggerIconUpdate(false);
         }
       }
     });
   }
 
   // Lets the main plugin know that the cursor location has changed by calling its own function, with a set of data
-  triggerIconUpdate() {
-    
+  triggerIconUpdate(shouldAnimate: boolean) {
+    this.plugin.updateIconLocation(this.selectionData, shouldAnimate);
   }
 
   haveCaretsMoved(prevCaretInfo: SelectionData[], currCaretInfo: SelectionData[]) {
