@@ -87,7 +87,7 @@ export default class SmoothTypingAnimation extends Plugin {
 			- If it is, then we call our animation logic.
 		*/
 		if (!selectionData || selectionData.length <= 0) { return; }
-		console.log(`called with data: ${JSON.stringify(selectionData)}`);
+		// console.log(`called with data: ${JSON.stringify(selectionData)}`);
 		
 		const data = selectionData[0];
 		requestAnimationFrame(() => {

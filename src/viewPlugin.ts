@@ -22,18 +22,12 @@ export class CursorTracker implements PluginValue {
   constructor(view: EditorView, plugin: SmoothTypingAnimation) {
     this.view = view;
     this.plugin = plugin;
-
-    // Set initial cursor coordinates once window loads in
-    view.requestMeasure({ read: () => { requestAnimationFrame(() => {
-      this.selectionData = this.selectionFromRanges(view, view.state.selection.ranges);
-      this.signalCursorUpdate(false);
-    }); } });
   }
 
   update(update: ViewUpdate) {
     const view = update.view;
     if (update.focusChanged) { this.signalFocusChange(view.hasFocus); }
-    if (!view.hasFocus) { return; }
+    if (!view.hasFocus || update.transactions.length === 0) { return; }
 
     // Everything from here needs to be done within the 'read' portion of the CM cycle, so that we can access data like the cursor coords:
     view.requestMeasure({
@@ -42,6 +36,7 @@ export class CursorTracker implements PluginValue {
         const hasMoved = this.haveCaretsMoved(this.selectionData, selectionData);
 
         if (hasMoved) {
+          console.log(update.transactions);
           // console.log("hasMoved");
           // const triggeredByTyping = this.wasTriggeredByTyping(update.transactions[0]);
 
