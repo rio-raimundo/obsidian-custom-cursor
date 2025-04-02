@@ -1,7 +1,7 @@
-import { SelectionRange, Transaction } from "@codemirror/state";
+import { Extension, SelectionRange, Transaction } from "@codemirror/state";
 import {
   EditorView,
-  PluginValue,
+  ViewPlugin,
   ViewUpdate,
 } from '@codemirror/view';
 import SmoothTypingAnimation from './main';
@@ -18,7 +18,7 @@ enum CursorChangeStates {
   NoChanges, UserInduced, NonUserInduced, FirstSet
 }
 
-export class CursorTracker implements PluginValue {
+export class CursorTracker implements ViewPlugin<CursorTracker> {
   view: EditorView;
   plugin: SmoothTypingAnimation;
   selectionData: SelectionData[];
@@ -27,6 +27,7 @@ export class CursorTracker implements PluginValue {
     this.view = view;
     this.plugin = plugin;
   }
+  extension: Extension;
 
   update(update: ViewUpdate) {
     const view = update.view;
@@ -39,7 +40,7 @@ export class CursorTracker implements PluginValue {
         const selectionData = this.selectionFromRanges(view, view.state.selection.ranges);
         const cursorChanges = this.listCursorChanges(this.selectionData, selectionData);
         
-        console.log("cursorChanges: ", CursorChangeStates[cursorChanges]);
+        // console.log("cursorChanges: ", CursorChangeStates[cursorChanges]);
         // update.transactions.length === 0
         
         // If cursor position has moved FOR ANY REASON (user input or not)
