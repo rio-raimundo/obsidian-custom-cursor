@@ -34,7 +34,6 @@ export class CursorTracker implements ViewPlugin<CursorTracker> {
     this.scrollHandler = debounce(() => this.handleCursorChanges(), this.plugin.scrollDebounceTime, true);
     this.view.scrollDOM.addEventListener("scroll", () => {
       this.scrollHandler();
-      console.log('scrolled!');
     });
 
   }
@@ -42,7 +41,7 @@ export class CursorTracker implements ViewPlugin<CursorTracker> {
 
   update(update: ViewUpdate) {
     if (update.focusChanged) { this.plugin.updateFocus(this.view.hasFocus); }
-    this.handleCursorChanges();
+    this.handleCursorChanges(update);
   }
 
   destroy() {
@@ -59,17 +58,15 @@ export class CursorTracker implements ViewPlugin<CursorTracker> {
         const selectionData = this.selectionFromRanges(view, view.state.selection.ranges);
         const cursorChanges = this.listCursorChanges(this.selectionData, selectionData);
         
-        // console.log("cursorChanges: ", CursorChangeStates[cursorChanges]);
-        // update.transactions.length === 0
-        
         // If cursor position has moved FOR ANY REASON (user input or not)
         if (cursorChanges !== CursorChangeStates.NoChanges) {
+          console.log(CursorChangeStates[cursorChanges]);
           
           // If this is the first time setting the cursor, make sure the update has annotations. This fixes the bug of transient cursor being rendered when clicking on a table cell for the first time.
           if (
             cursorChanges === CursorChangeStates.FirstSet &&
             update && update.transactions.length === 0
-          ) { return; }
+          ) { return;}
 
           // const triggeredByTyping = this.wasTriggeredByTyping(update.transactions[0]);
 
