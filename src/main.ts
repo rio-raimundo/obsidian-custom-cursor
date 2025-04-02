@@ -41,11 +41,13 @@ export default class SmoothTypingAnimation extends Plugin {
     tPrevSelectionChange: number = Date.now();
     tIgnoreSelectionChange = 5; // time in ms to ignore consecutive calls to listener
 
-
     caretInfos: CaretInfo[] = [];
     rightClickThisFrame = false;
 	isAnyFocused = true;  // Focus is set when page is first loaded
     rafHandle: number | null = null;
+
+    // Once per frame on 240Hz monitors
+    scrollDebounceTime = 4;
 	
     logRightClick(event: MouseEvent) {
         if (event.button === 2) {

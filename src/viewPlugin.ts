@@ -5,6 +5,7 @@ import {
   ViewUpdate,
 } from '@codemirror/view';
 import SmoothTypingAnimation from './main';
+import { debounce } from "obsidian"; // Or use a library/custom debounce
 
 export interface SelectionData {
   head: number;
@@ -23,15 +24,33 @@ export class CursorTracker implements ViewPlugin<CursorTracker> {
   plugin: SmoothTypingAnimation;
   selectionData: SelectionData[];
 
+  scrollHandler: () => void;
+
   constructor(view: EditorView, plugin: SmoothTypingAnimation) {
     this.view = view;
     this.plugin = plugin;
+
+    // Add scroll listener to handleCursorChanges when scrolling (with a debounce of 50ms)
+    this.scrollHandler = debounce(() => this.handleCursorChanges(), this.plugin.scrollDebounceTime, true);
+    this.view.scrollDOM.addEventListener("scroll", () => {
+      this.scrollHandler();
+      console.log('scrolled!');
+    });
+
   }
   extension: Extension;
 
   update(update: ViewUpdate) {
-    const view = update.view;
-    if (update.focusChanged) { this.signalFocusChange(view.hasFocus); }
+    if (update.focusChanged) { this.plugin.updateFocus(this.view.hasFocus); }
+    this.handleCursorChanges();
+  }
+
+  destroy() {
+    this.view.scrollDOM.removeEventListener("scroll", this.scrollHandler);
+  }
+
+  handleCursorChanges(update: ViewUpdate | null = null) {
+    const view = this.view;
     if (!view.hasFocus) { return; }
 
     // Everything from here needs to be done within the 'read' portion of the CM cycle, so that we can access data like the cursor coords:
@@ -46,22 +65,21 @@ export class CursorTracker implements ViewPlugin<CursorTracker> {
         // If cursor position has moved FOR ANY REASON (user input or not)
         if (cursorChanges !== CursorChangeStates.NoChanges) {
           
-          // This makes sure that transient cursors are not rendered at the start of table cells when they are first clicked on
-          if (cursorChanges === CursorChangeStates.FirstSet && update.transactions.length === 0) { return; }
+          // If this is the first time setting the cursor, make sure the update has annotations. This fixes the bug of transient cursor being rendered when clicking on a table cell for the first time.
+          if (
+            cursorChanges === CursorChangeStates.FirstSet &&
+            update && update.transactions.length === 0
+          ) { return; }
 
           // const triggeredByTyping = this.wasTriggeredByTyping(update.transactions[0]);
 
           // Update the selection data and trigger the icon update from the main plugin
-          this.selectionData = selectionData; 
-          this.signalCursorUpdate(false);
+          this.selectionData = selectionData;
+          this.plugin.updateIconLocation(selectionData, false);
         }
       }
     });
   }
-
-  // Functions to inform the main plugin of a change, so it can handle it
-  signalCursorUpdate(shouldAnimate: boolean) { this.plugin.updateIconLocation(this.selectionData, shouldAnimate); }
-  signalFocusChange(isGained: boolean) { this.plugin.updateFocus(isGained); }
 
   // This function will tell you if the COORDINATES of the cursor icon have changed for any reason (e.g. through scrolling, resizing window etc)
   listCursorChanges(prevCaretInfo: SelectionData[], currCaretInfo: SelectionData[]): CursorChangeStates {
