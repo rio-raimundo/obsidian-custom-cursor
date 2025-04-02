@@ -14,6 +14,10 @@ export interface SelectionData {
   height: number;
 }
 
+enum CursorChangeStates {
+  NoChanges, UserInduced, NonUserInduced, FirstSet
+}
+
 export class CursorTracker implements PluginValue {
   view: EditorView;
   plugin: SmoothTypingAnimation;
@@ -27,17 +31,23 @@ export class CursorTracker implements PluginValue {
   update(update: ViewUpdate) {
     const view = update.view;
     if (update.focusChanged) { this.signalFocusChange(view.hasFocus); }
-    if (!view.hasFocus || update.transactions.length === 0) { return; }
+    if (!view.hasFocus) { return; }
 
     // Everything from here needs to be done within the 'read' portion of the CM cycle, so that we can access data like the cursor coords:
     view.requestMeasure({
       read: () => {
         const selectionData = this.selectionFromRanges(view, view.state.selection.ranges);
-        const hasMoved = this.haveCaretsMoved(this.selectionData, selectionData);
+        const cursorChanges = this.listCursorChanges(this.selectionData, selectionData);
+        
+        console.log("cursorChanges: ", CursorChangeStates[cursorChanges]);
+        // update.transactions.length === 0
+        
+        // If cursor position has moved FOR ANY REASON (user input or not)
+        if (cursorChanges !== CursorChangeStates.NoChanges) {
+          
+          // This makes sure that transient cursors are not rendered at the start of table cells when they are first clicked on
+          if (cursorChanges === CursorChangeStates.FirstSet && update.transactions.length === 0) { return; }
 
-        if (hasMoved) {
-          console.log(update.transactions);
-          // console.log("hasMoved");
           // const triggeredByTyping = this.wasTriggeredByTyping(update.transactions[0]);
 
           // Update the selection data and trigger the icon update from the main plugin
@@ -52,17 +62,34 @@ export class CursorTracker implements PluginValue {
   signalCursorUpdate(shouldAnimate: boolean) { this.plugin.updateIconLocation(this.selectionData, shouldAnimate); }
   signalFocusChange(isGained: boolean) { this.plugin.updateFocus(isGained); }
 
-  haveCaretsMoved(prevCaretInfo: SelectionData[], currCaretInfo: SelectionData[]) {
-    // Handle undefined cases
-    if (!prevCaretInfo && !currCaretInfo) { return false; }
-    if (!prevCaretInfo || !currCaretInfo) { return true; }
+  // This function will tell you if the COORDINATES of the cursor icon have changed for any reason (e.g. through scrolling, resizing window etc)
+  listCursorChanges(prevCaretInfo: SelectionData[], currCaretInfo: SelectionData[]): CursorChangeStates {
+    const out = CursorChangeStates;
 
-    if (prevCaretInfo.length !== currCaretInfo.length) { return true; }
+    // Handle cases current and/or previous info is undefined
+    if (!prevCaretInfo && !currCaretInfo) { return out.NoChanges; }
+    if (!prevCaretInfo || !currCaretInfo) { return out.FirstSet; }
+
+    // If carets have been added or taken away, this is always true and due to user input (I think?)
+    if (prevCaretInfo.length !== currCaretInfo.length) { return out.UserInduced; }
+
+    // If the head of any caret changes this is due to user input.
+    // I think we will always only have to check the first head, because there is no way to move one selected cursor without moving all of them. But best to still write this as a for loop in case I'm dumb and there's something I'm missing.
     for (let i = 0; i < prevCaretInfo.length; i++) {
-        if (prevCaretInfo[i].head !== currCaretInfo[i].head) { return true; }
+      if (prevCaretInfo[i].head !== currCaretInfo[i].head) { return out.UserInduced; }
     }
 
-    return false;
+    // Otherwise we check if the x and y coords of any caret have changed, covering other cases such as scrolling
+    for (let i = 0; i < prevCaretInfo.length; i++) {
+      if (
+        prevCaretInfo[i].x !== currCaretInfo[0].x ||
+        prevCaretInfo[i].y !== currCaretInfo[0].y ||
+        prevCaretInfo[i].height !== currCaretInfo[0].height)
+        { return out.NonUserInduced; }
+    }
+
+    // Finally, if all is the same, no changes have occurred.
+    return out.NoChanges;
   }
 
   wasTriggeredByClick = (transactions: readonly Transaction[]) => {

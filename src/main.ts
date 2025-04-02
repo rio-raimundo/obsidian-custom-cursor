@@ -45,6 +45,7 @@ export default class SmoothTypingAnimation extends Plugin {
     caretInfos: CaretInfo[] = [];
     rightClickThisFrame = false;
 	isAnyFocused = true;  // Focus is set when page is first loaded
+    rafHandle: number | null = null;
 	
     logRightClick(event: MouseEvent) {
         if (event.button === 2) {
@@ -88,9 +89,12 @@ export default class SmoothTypingAnimation extends Plugin {
 		*/
 		if (!selectionData || selectionData.length <= 0) { return; }
 		// console.log(`called with data: ${JSON.stringify(selectionData)}`);
+
+        // If multiple calls have happened during the same frame, then we want to clear the buffer and replace
+        if (this.rafHandle !== null) { cancelAnimationFrame(this.rafHandle); }
 		
 		const data = selectionData[0];
-		requestAnimationFrame(() => {
+		this.rafHandle = requestAnimationFrame(() => {
 			if (!this.isAnyFocused) { return; }
 			const style = this.cursorElement.style;
 			if (data) {
